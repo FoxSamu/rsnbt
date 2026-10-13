@@ -36,10 +36,10 @@ impl Eq for KeyRef {}
 
 #[derive(Debug)]
 struct Node {
-    key:   Box<String>, // Must be boxed so rust doesn't move it and break our pointer in KeyRef
+    key: Box<String>, // Must be boxed so rust doesn't move it and break our pointer in KeyRef
     value: Tag,
-    prev:  *mut Node,
-    next:  *mut Node,
+    prev: *mut Node,
+    next: *mut Node,
 }
 
 impl Node {
@@ -68,10 +68,10 @@ impl PartialEq for Node {
 impl Clone for Node {
     fn clone(&self) -> Self {
         Self {
-            key:   self.key.clone(),
+            key: self.key.clone(),
             value: self.value.clone(),
-            prev:  null_mut(),
-            next:  null_mut(),
+            prev: null_mut(),
+            next: null_mut(),
         }
     }
 }
@@ -137,7 +137,7 @@ enum InsertMode {
 ///
 /// The iteration order of maps created by this macro is the order in which keys were defined in the macro body.
 pub struct TagMap {
-    map:  HashMap<KeyRef, Box<Node>>,
+    map: HashMap<KeyRef, Box<Node>>,
     head: *mut Node,
     tail: *mut Node,
 }
@@ -145,7 +145,7 @@ pub struct TagMap {
 impl TagMap {
     pub fn new() -> Self {
         Self {
-            map:  HashMap::new(),
+            map: HashMap::new(),
             head: null_mut(),
             tail: null_mut(),
         }
@@ -434,7 +434,7 @@ impl TagMap {
     /// The iterator returns keys in the current iteration order of the map.
     pub fn keys(&self) -> Keys<'_> {
         Keys {
-            next:     self.head,
+            next: self.head,
             lifetime: PhantomData,
         }
     }
@@ -443,7 +443,7 @@ impl TagMap {
     /// The iterator returns values in the current iteration order of the map.
     pub fn values(&self) -> Values<'_> {
         Values {
-            next:     self.head,
+            next: self.head,
             lifetime: PhantomData,
         }
     }
@@ -452,7 +452,7 @@ impl TagMap {
     /// The iterator returns elements in the current iteration order of the map.
     pub fn iter(&self) -> Iter<'_> {
         Iter {
-            next:     self.head,
+            next: self.head,
             lifetime: PhantomData,
         }
     }
@@ -461,7 +461,7 @@ impl TagMap {
     /// The iterator returns keys in the current iteration order of the map.
     pub fn into_keys(self) -> IntoKeys {
         IntoKeys {
-            next:   self.head,
+            next: self.head,
             _owner: self,
         }
     }
@@ -470,7 +470,7 @@ impl TagMap {
     /// The iterator returns values in the current iteration order of the map.
     pub fn into_values(self) -> IntoValues {
         IntoValues {
-            next:   self.head,
+            next: self.head,
             _owner: self,
         }
     }
@@ -493,7 +493,7 @@ impl IntoIterator for TagMap {
 
     fn into_iter(self) -> Self::IntoIter {
         IntoIter {
-            next:   self.head,
+            next: self.head,
             _owner: self,
         }
     }
@@ -520,7 +520,7 @@ impl PartialEq for TagMap {
 }
 
 pub struct Values<'a> {
-    next:     *const Node,
+    next: *const Node,
     lifetime: PhantomData<&'a Node>,
 }
 
@@ -542,7 +542,7 @@ impl<'a> Iterator for Values<'a> {
 }
 
 pub struct Keys<'a> {
-    next:     *const Node,
+    next: *const Node,
     lifetime: PhantomData<&'a Node>,
 }
 
@@ -564,7 +564,7 @@ impl<'a> Iterator for Keys<'a> {
 }
 
 pub struct Iter<'a> {
-    next:     *const Node,
+    next: *const Node,
     lifetime: PhantomData<&'a Node>,
 }
 
@@ -590,7 +590,7 @@ const REPLACE_TAG: Tag = Tag::Byte(0);
 const REPLACE_KEY: String = String::new();
 
 pub struct IntoValues {
-    next:   *mut Node,
+    next: *mut Node,
     _owner: TagMap, // must keep ownership over pointer owner so the pointers don't get dropped yet
 }
 
@@ -618,7 +618,7 @@ impl Iterator for IntoValues {
 }
 
 pub struct IntoKeys {
-    next:   *mut Node,
+    next: *mut Node,
     _owner: TagMap, // must keep ownership over pointer owner so the pointers don't get dropped yet
 }
 
@@ -646,7 +646,7 @@ impl Iterator for IntoKeys {
 }
 
 pub struct IntoIter {
-    next:   *mut Node,
+    next: *mut Node,
     _owner: TagMap, // must keep ownership over pointer owner so the pointers don't get dropped yet
 }
 

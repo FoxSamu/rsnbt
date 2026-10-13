@@ -17,6 +17,22 @@ pub enum TagId {
 }
 
 impl TagId {
+    /// The maximum possible tag ID byte.
+    pub const MAX: u8 = 12;
+
+    pub const BYTE: u8 = 1;
+    pub const SHORT: u8 = 2;
+    pub const INT: u8 = 3;
+    pub const LONG: u8 = 4;
+    pub const FLOAT: u8 = 5;
+    pub const DOUBLE: u8 = 6;
+    pub const STRING: u8 = 8;
+    pub const BYTE_ARRAY: u8 = 7;
+    pub const INT_ARRAY: u8 = 11;
+    pub const LONG_ARRAY: u8 = 12;
+    pub const LIST: u8 = 9;
+    pub const COMPOUND: u8 = 10;
+
     pub const fn byte(&self) -> u8 {
         match self {
             TagId::Byte => 1,

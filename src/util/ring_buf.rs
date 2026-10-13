@@ -25,11 +25,11 @@ use std::ptr::read;
 /// ring buffer appear in a certain order, they are necessarily next to eachother in memory. Simply
 /// put, the values in a ring buffer can always be returned in one coherent slice.
 pub struct RingBuf<T> {
-    buf:    *mut T,
+    buf: *mut T,
     layout: Layout,
-    size:   usize,
-    pos:    usize,
-    len:    usize,
+    size: usize,
+    pos: usize,
+    len: usize,
 }
 
 impl<T> RingBuf<T> {
@@ -202,9 +202,7 @@ impl<T> RingBuf<T> {
     /// them. The iterator returns immutable references to all the values in this ring buffer, in
     /// the order of insertion.
     pub fn iter(&self) -> Iter<'_, T> {
-        Iter {
-            buf: self, idx: 0
-        }
+        Iter { buf: self, idx: 0 }
     }
 
     /// Returns an [`IterMut`], which iterates over all the elements in this ring buffer without
@@ -212,8 +210,8 @@ impl<T> RingBuf<T> {
     /// in the order of insertion.
     pub fn iter_mut(&mut self) -> IterMut<'_, T> {
         IterMut {
-            buf:      self as *mut Self,
-            idx:      0,
+            buf: self as *mut Self,
+            idx: 0,
             _phantom: &PhantomData,
         }
     }
@@ -299,9 +297,7 @@ impl<T> IntoIterator for RingBuf<T> {
     type IntoIter = IntoIter<T>;
 
     fn into_iter(self) -> Self::IntoIter {
-        IntoIter {
-            buf: self
-        }
+        IntoIter { buf: self }
     }
 }
 
@@ -398,8 +394,8 @@ impl<'a, T> Iterator for Iter<'a, T> {
 }
 
 pub struct IterMut<'a, T> {
-    buf:      *mut RingBuf<T>,
-    idx:      usize,
+    buf: *mut RingBuf<T>,
+    idx: usize,
     _phantom: &'a PhantomData<T>,
 }
 
@@ -431,7 +427,6 @@ impl<T> Iterator for IntoIter<T> {
         self.buf.poll()
     }
 }
-
 
 #[cfg(test)]
 mod test {

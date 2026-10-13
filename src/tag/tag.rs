@@ -143,32 +143,44 @@ pub trait IntoNumericTag {
 
 impl Tag {
     pub fn byte_from<T>(v: T) -> Tag
-    where T: IntoNumericTag {
+    where
+        T: IntoNumericTag,
+    {
         Tag::Byte(v.into_byte_tag_value())
     }
 
     pub fn short_from<T>(v: T) -> Tag
-    where T: IntoNumericTag {
+    where
+        T: IntoNumericTag,
+    {
         Tag::Short(v.into_short_tag_value())
     }
 
     pub fn int_from<T>(v: T) -> Tag
-    where T: IntoNumericTag {
+    where
+        T: IntoNumericTag,
+    {
         Tag::Int(v.into_int_tag_value())
     }
 
     pub fn long_from<T>(v: T) -> Tag
-    where T: IntoNumericTag {
+    where
+        T: IntoNumericTag,
+    {
         Tag::Long(v.into_long_tag_value())
     }
 
     pub fn float_from<T>(v: T) -> Tag
-    where T: IntoNumericTag {
+    where
+        T: IntoNumericTag,
+    {
         Tag::Float(v.into_float_tag_value())
     }
 
     pub fn double_from<T>(v: T) -> Tag
-    where T: IntoNumericTag {
+    where
+        T: IntoNumericTag,
+    {
         Tag::Double(v.into_double_tag_value())
     }
 }
@@ -269,9 +281,9 @@ macro_rules! simple_numeric_borrows {
     ($type:ty, $name:ident, $name_mut:ident, $into_name:ident, $kind:ident) => {
         impl Tag {
             #[doc = concat!(
-                                        "If this [Tag] is a [Tag::", stringify!($kind), "], returns an immutable ",
-                                        "reference to the [", stringify!($type), "] representing the tag's value."
-                                    )]
+                                                "If this [Tag] is a [Tag::", stringify!($kind), "], returns an immutable ",
+                                                "reference to the [", stringify!($type), "] representing the tag's value."
+                                            )]
             ///
             /// ```
             /// use crate::tag::*;
@@ -279,14 +291,18 @@ macro_rules! simple_numeric_borrows {
             #[doc = concat!("assert_eq!(5, *tag.", stringify!($name), "());")]
             /// ```
             pub fn $name(&self) -> Option<&$type> {
-                if let Tag::$kind(v) = self { Some(v) } else { None }
+                if let Tag::$kind(v) = self {
+                    Some(v)
+                } else {
+                    None
+                }
             }
 
             #[doc = concat!(
-                                        "If this [Tag] is a [Tag::", stringify!($kind), "], returns a mutable ",
-                                        "reference to the [", stringify!($type), "] representing the tag's value, ",
-                                        "through which the value of the tag can be directly modified."
-                                    )]
+                                                "If this [Tag] is a [Tag::", stringify!($kind), "], returns a mutable ",
+                                                "reference to the [", stringify!($type), "] representing the tag's value, ",
+                                                "through which the value of the tag can be directly modified."
+                                            )]
             ///
             /// ```
             /// use crate::tag::*;
@@ -298,13 +314,17 @@ macro_rules! simple_numeric_borrows {
             #[doc = concat!("assert_eq!(Tag::", stringify!($kind), "(42), tag);")]
             /// ```
             pub fn $name_mut(&mut self) -> Option<&mut $type> {
-                if let Tag::$kind(v) = self { Some(v) } else { None }
+                if let Tag::$kind(v) = self {
+                    Some(v)
+                } else {
+                    None
+                }
             }
 
             #[doc = concat!(
-                                        "If this [Tag] is a [Tag::", stringify!($kind), "], returns the ",
-                                        "[", stringify!($type), "] representing the tag's value."
-                                    )]
+                                                "If this [Tag] is a [Tag::", stringify!($kind), "], returns the ",
+                                                "[", stringify!($type), "] representing the tag's value."
+                                            )]
             ///
             /// ```
             /// use crate::tag::*;
@@ -312,7 +332,11 @@ macro_rules! simple_numeric_borrows {
             #[doc = concat!("assert_eq!(5, tag.", stringify!($into_name), "());")]
             /// ```
             pub fn $into_name(self) -> Option<$type> {
-                if let Tag::$kind(v) = self { Some(v) } else { None }
+                if let Tag::$kind(v) = self {
+                    Some(v)
+                } else {
+                    None
+                }
             }
         }
     };
@@ -413,23 +437,41 @@ impl IntoStringTag for &str {
 
 impl Tag {
     pub fn string(&self) -> Option<&String> {
-        if let Tag::String(str) = self { Some(str) } else { None }
+        if let Tag::String(str) = self {
+            Some(str)
+        } else {
+            None
+        }
     }
 
     pub fn string_mut(&mut self) -> Option<&mut String> {
-        if let Tag::String(str) = self { Some(str) } else { None }
+        if let Tag::String(str) = self {
+            Some(str)
+        } else {
+            None
+        }
     }
 
     pub fn into_string(self) -> Option<String> {
-        if let Tag::String(str) = self { Some(str) } else { None }
+        if let Tag::String(str) = self {
+            Some(str)
+        } else {
+            None
+        }
     }
 
     pub fn str(&self) -> Option<&str> {
-        if let Tag::String(str) = self { Some(str.as_str()) } else { None }
+        if let Tag::String(str) = self {
+            Some(str.as_str())
+        } else {
+            None
+        }
     }
 
     pub fn string_from<T>(v: T) -> Tag
-    where T: IntoStringTag {
+    where
+        T: IntoStringTag,
+    {
         Tag::String(v.into_string_tag_value())
     }
 }
@@ -525,17 +567,23 @@ into_array_tag_impl!(IntoLongArrayTag, into_long_array_tag_value, i64, {}, Vec<i
 
 impl Tag {
     pub fn byte_array_from<T>(v: T) -> Tag
-    where T: IntoByteArrayTag {
+    where
+        T: IntoByteArrayTag,
+    {
         Tag::ByteArray(v.into_byte_array_tag_value())
     }
 
     pub fn int_array_from<T>(v: T) -> Tag
-    where T: IntoIntArrayTag {
+    where
+        T: IntoIntArrayTag,
+    {
         Tag::IntArray(v.into_int_array_tag_value())
     }
 
     pub fn long_array_from<T>(v: T) -> Tag
-    where T: IntoLongArrayTag {
+    where
+        T: IntoLongArrayTag,
+    {
         Tag::LongArray(v.into_long_array_tag_value())
     }
 }
@@ -548,15 +596,9 @@ delegated_from!({<const N: usize>}, &[u8; N], &[u8]);
 delegated_from!({<const N: usize>}, &[u32; N], &[u32]);
 delegated_from!({<const N: usize>}, &[u64; N], &[u64]);
 
-delegated_from!({}, &[u8], Vec<i8>, |value| Vec::from(
-    reinterpret_slice!(value, u8 => i8)
-));
-delegated_from!({}, &[u32], Vec<i32>, |value| Vec::from(
-    reinterpret_slice!(value, u32 => i32)
-));
-delegated_from!({}, &[u64], Vec<i64>, |value| Vec::from(
-    reinterpret_slice!(value, u64 => i64)
-));
+delegated_from!({}, &[u8], Vec<i8>, |value| Vec::from(reinterpret_slice!(value, u8 => i8)));
+delegated_from!({}, &[u32], Vec<i32>, |value| Vec::from(reinterpret_slice!(value, u32 => i32)));
+delegated_from!({}, &[u64], Vec<i64>, |value| Vec::from(reinterpret_slice!(value, u64 => i64)));
 
 delegated_from!({<const N: usize>}, [i8; N], &[i8; N], |value| &value);
 delegated_from!({<const N: usize>}, [i32; N], &[i32; N], |value| &value);

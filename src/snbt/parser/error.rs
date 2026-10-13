@@ -86,8 +86,6 @@ pub enum ParseError<E> {
 /// mechanism. It is wrapped in [`ParseError`] and may be [`Infallible`].
 pub type ParseResult<T, E> = StdResult<T, ParseError<E>>;
 
-
-
 // ============================================================================================
 
 impl Display for SyntaxError {

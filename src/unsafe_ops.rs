@@ -11,9 +11,7 @@ pub unsafe fn hyper_unsafe_reinterpret_array<T, U, const N: usize>(v: [T; N]) ->
         }
 
         // Set T
-        let dual = Dual {
-            t: ManuallyDrop::new(v),
-        };
+        let dual = Dual { t: ManuallyDrop::new(v) };
 
         // Obtain U
         ManuallyDrop::into_inner(dual.u)
@@ -78,12 +76,7 @@ macro_rules! reinterpret_array {
                 );
                 assert!(
                     align_of::<$from>() == align_of::<$to>(),
-                    concat!(
-                        stringify!($from),
-                        " and ",
-                        stringify!($to),
-                        " are not the same alignment!"
-                    )
+                    concat!(stringify!($from), " and ", stringify!($to), " are not the same alignment!")
                 );
             }
             hyper_unsafe_reinterpret_array::<$from, $to, _>($slice)
@@ -117,12 +110,7 @@ macro_rules! reinterpret_array_ref {
                 );
                 assert!(
                     align_of::<$from>() == align_of::<$to>(),
-                    concat!(
-                        stringify!($from),
-                        " and ",
-                        stringify!($to),
-                        " are not the same alignment!"
-                    )
+                    concat!(stringify!($from), " and ", stringify!($to), " are not the same alignment!")
                 );
             }
             hyper_unsafe_reinterpret_array_ref::<$from, $to, _>($slice)
@@ -155,12 +143,7 @@ macro_rules! reinterpret_slice {
                 );
                 assert!(
                     align_of::<$from>() == align_of::<$to>(),
-                    concat!(
-                        stringify!($from),
-                        " and ",
-                        stringify!($to),
-                        " are not the same alignment!"
-                    )
+                    concat!(stringify!($from), " and ", stringify!($to), " are not the same alignment!")
                 );
             }
             hyper_unsafe_reinterpret_slice::<$from, $to>($slice)
@@ -193,12 +176,7 @@ macro_rules! reinterpret_vec {
                 );
                 assert!(
                     align_of::<$from>() == align_of::<$to>(),
-                    concat!(
-                        stringify!($from),
-                        " and ",
-                        stringify!($to),
-                        " are not the same alignment!"
-                    )
+                    concat!(stringify!($from), " and ", stringify!($to), " are not the same alignment!")
                 );
             }
             hyper_unsafe_reinterpret_vec::<$from, $to>($vec)

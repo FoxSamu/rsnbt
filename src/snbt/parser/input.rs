@@ -9,7 +9,6 @@ use crate::snbt::parser::lex::Lexer;
 use crate::snbt::parser::parse::Parser;
 use crate::tag::Tag;
 
-
 /// Parses the given input as SNBT and returns the parsed [`Tag`].
 pub fn parse_chars<T, I, E>(input: T, config: &ParseConfig) -> ParseResult<Tag, E>
 where
@@ -21,14 +20,12 @@ where
     parser.value()
 }
 
-
 pub trait IntoInput<I, E>
 where
     I: Iterator<Item = Result<char, E>>,
 {
     fn into_input(self) -> I;
 }
-
 
 /// A wrapper for infallible char inputs. These are for input sources that can produce the entire
 /// char stream with no failures. A prime example is [`String`].
@@ -38,7 +35,6 @@ where
 {
     chars: I,
 }
-
 
 // String-like -> IntoInput
 
@@ -55,17 +51,13 @@ where
 
 impl<'a> IntoInput<InfallibleIter<Chars<'a>>, Infallible> for &'a String {
     fn into_input(self) -> InfallibleIter<Chars<'a>> {
-        InfallibleIter {
-            chars: self.chars()
-        }
+        InfallibleIter { chars: self.chars() }
     }
 }
 
 impl<'a> IntoInput<InfallibleIter<Chars<'a>>, Infallible> for &'a str {
     fn into_input(self) -> InfallibleIter<Chars<'a>> {
-        InfallibleIter {
-            chars: self.chars()
-        }
+        InfallibleIter { chars: self.chars() }
     }
 }
 
@@ -93,7 +85,6 @@ impl<'a> IntoInput<InfallibleIter<Copied<Iter<'a, char>>>, Infallible> for &'a m
     }
 }
 
-
 // Iterator<char> -> IntoInput
 
 impl<'a, I> IntoInput<InfallibleIter<I>, Infallible> for I
@@ -101,13 +92,9 @@ where
     I: Iterator<Item = char>,
 {
     fn into_input(self) -> InfallibleIter<I> {
-        InfallibleIter {
-            chars: self
-        }
+        InfallibleIter { chars: self }
     }
 }
-
-
 
 // Iterator<Result<char, E>> -> IntoInput
 

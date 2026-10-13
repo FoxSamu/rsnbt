@@ -79,6 +79,18 @@ pub enum Compression {
 
     /// Use Deflate with slow but most efficient compression
     DeflateBest,
+
+    /// Use LZ4 but do not compress
+    Lz4None,
+
+    /// Use LZ4 with fast but less efficient compression
+    Lz4Fast,
+
+    /// Use LZ4 with medium compression with medium efficiency
+    Lz4Mid,
+
+    /// Use LZ4 with slow but most efficient compression
+    Lz4Best,
 }
 
 impl Compression {
@@ -108,6 +120,16 @@ impl Compression {
             Compression::DeflateFast => Some(CompressionLevel::fast()),
             Compression::DeflateMid => Some(CompressionLevel::new(5)),
             Compression::DeflateBest => Some(CompressionLevel::best()),
+            _ => None,
+        }
+    }
+
+    fn lz4_level(&self) -> Option<u32> {
+        match self {
+            Compression::Lz4None => Some(0),
+            Compression::Lz4Fast => Some(1),
+            Compression::Lz4Mid => Some(5),
+            Compression::Lz4Best => Some(9),
             _ => None,
         }
     }
@@ -159,7 +181,8 @@ pub struct NbtOutputConfig {
 pub fn encode<'a, R, W>(name: &String, tag: R, mut stream: W, config: &NbtOutputConfig) -> Result<()>
 where
     R: Into<TagRef<'a>>,
-    W: Write, {
+    W: Write,
+{
     if let Some(level) = config.compression.gzip_level() {
         let mut encoder = GzEncoder::new(stream, level);
 
@@ -187,6 +210,17 @@ where
         };
 
         output.write_root(name, tag.into())
+    } else if let Some(level) = config.compression.lz4_level() {
+        let mut encoder = lz4::EncoderBuilder::new()
+            .level(level)
+            .build(stream)?;
+
+        let mut output = NbtOutput {
+            stream: &mut encoder,
+            config,
+        };
+
+        output.write_root(name, tag.into())
     } else {
         let mut output = NbtOutput {
             stream: &mut stream,
@@ -198,7 +232,9 @@ where
 }
 
 pub fn encode_blob<'a, R>(name: &String, tag: R, config: &NbtOutputConfig) -> Result<Vec<u8>>
-where R: Into<TagRef<'a>> {
+where
+    R: Into<TagRef<'a>>,
+{
     let mut cursor = Cursor::default();
     encode(name, tag, &mut cursor, config)?;
     Ok(cursor.into_inner())
@@ -217,23 +253,26 @@ macro_rules! as_bytes {
 impl Default for NbtOutputConfig {
     fn default() -> Self {
         Self {
-            empty_list_id:  Default::default(),
+            empty_list_id: Default::default(),
             compound_order: Default::default(),
-            big_endian:     true,
-            max_depth:      512,
-            compression:    Default::default(),
+            big_endian: true,
+            max_depth: 512,
+            compression: Default::default(),
         }
     }
 }
 
 struct NbtOutput<'a, 'b, W>
-where W: Write {
+where
+    W: Write,
+{
     stream: &'a mut W,
     config: &'b NbtOutputConfig,
 }
 
 impl<'a, 'b, W> NbtOutput<'a, 'b, W>
-where W: Write
+where
+    W: Write,
 {
     fn write_end(&mut self) -> Result<()> {
         self.stream.write_all(&[0])
@@ -319,10 +358,7 @@ where W: Write
         };
 
         if len > (isize::MAX / 4) as usize {
-            Err(Error::new(
-                ErrorKind::QuotaExceeded,
-                "Int array exceeds addressing limit",
-            ))?;
+            Err(Error::new(ErrorKind::QuotaExceeded, "Int array exceeds addressing limit"))?;
         };
 
         self.write_i32(len as i32)?;
@@ -360,10 +396,7 @@ where W: Write
         };
 
         if len > (isize::MAX / 8) as usize {
-            Err(Error::new(
-                ErrorKind::QuotaExceeded,
-                "Long array exceeds addressing limit",
-            ))?;
+            Err(Error::new(ErrorKind::QuotaExceeded, "Long array exceeds addressing limit"))?;
         };
 
         self.write_i32(len as i32)?;

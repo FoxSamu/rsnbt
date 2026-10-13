@@ -21,8 +21,8 @@ pub fn parse_numeral(numeral: &String, config: &ParseConfig) -> Option<Tag> {
 
 /// Parser state for numeral parsing.
 struct NumeralParser<'a, 'b> {
-    bytes:  &'a [u8],
-    index:  usize,
+    bytes: &'a [u8],
+    index: usize,
     config: &'b ParseConfig,
 }
 
@@ -336,13 +336,11 @@ impl NumeralParser<'_, '_> {
     }
 }
 
-
 /// A raw integer value.
 ///
 /// Integer values are parsed into binary values of type [`u64`], since no int in SNBT can reach
 /// higher than the limits of [`u64`], and the sign is kept separate.
 struct RawInt(bool, u64);
-
 
 /// Macro generating a conversion method for a specific integer size and signedness. The generated
 /// conversion method checks the size of the raw input against the limits and converts the result to
@@ -420,7 +418,6 @@ impl RawInt {
     convert!(sl, i64 as u64, i64);
 }
 
-
 /// A raw float value.
 ///
 /// Raw floats are parsed using Rust's built-in flaot parser, but are validated by the SNBT parser
@@ -464,7 +461,6 @@ impl RawFloat {
         }
     }
 }
-
 
 #[cfg(test)]
 mod test {
@@ -521,12 +517,20 @@ mod test {
     st!(CFG | test_byte_max, "127b", Some(Tag::Byte(127)));
     st!(CFG | test_short_max, "32767s", Some(Tag::Short(32767)));
     st!(CFG | test_int_max, "2147483647i", Some(Tag::Int(2147483647)));
-    st!(CFG | test_long_max, "9223372036854775807l", Some(Tag::Long(9223372036854775807)));
+    st!(
+        CFG | test_long_max,
+        "9223372036854775807l",
+        Some(Tag::Long(9223372036854775807))
+    );
 
     st!(CFG | test_byte_min, "-128b", Some(Tag::Byte(-128)));
     st!(CFG | test_short_min, "-32768s", Some(Tag::Short(-32768)));
     st!(CFG | test_int_min, "-2147483648i", Some(Tag::Int(-2147483648)));
-    st!(CFG | test_long_min, "-9223372036854775808l", Some(Tag::Long(-9223372036854775808)));
+    st!(
+        CFG | test_long_min,
+        "-9223372036854775808l",
+        Some(Tag::Long(-9223372036854775808))
+    );
 
     st!(CFG | float_z, "0f", Some(Tag::Float(0.0)));
     st!(CFG | float_df, "3.14f", Some(Tag::Float(3.14)));
@@ -549,5 +553,9 @@ mod test {
     st!(CFG | double_fe, ".14e21", Some(Tag::Double(0.14e21)));
 
     st!(CFG | double_too_big, "79769313486231571E+308", None);
-    st!(CFG | double_max, "1.7976931348623157E+308", Some(Tag::Double(1.7976931348623157E+308)));
+    st!(
+        CFG | double_max,
+        "1.7976931348623157E+308",
+        Some(Tag::Double(1.7976931348623157E+308))
+    );
 }

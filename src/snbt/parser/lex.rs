@@ -78,7 +78,7 @@ impl Debug for TokenKind {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Token {
     pub index: u64,
-    pub kind:  TokenKind,
+    pub kind: TokenKind,
     pub value: String,
 }
 
@@ -123,22 +123,20 @@ impl<E> Symbol for StdResult<char, E> {
     }
 }
 
-
 enum Escape {
     Ignore,
     Char(u16),
     SurrogatePair(u16, u16),
 }
 
-
 pub struct Lexer<'a, I, S>
 where
     I: Iterator<Item = S>,
     S: Symbol,
 {
-    input:  I,
-    next:   Option<char>,
-    index:  u64,
+    input: I,
+    next: Option<char>,
+    index: u64,
     config: &'a ParseConfig,
 }
 
@@ -274,9 +272,7 @@ where
         let mut ident = String::new();
 
         let (inf, nan, infinity, big_nan, lemniscate) = match self.config.nonfinite_floats {
-            NonfiniteFloats::Disabled {
-                ..
-            } => (false, false, false, false, false),
+            NonfiniteFloats::Disabled { .. } => (false, false, false, false, false),
 
             NonfiniteFloats::InfinityOnly {
                 js_like,
@@ -302,7 +298,6 @@ where
             ident.push(c);
             self.advance()?;
         }
-
 
         // match as byte slice for 2 reasons:
         // - all characters are ascii so why bother with utf-8?
@@ -432,8 +427,8 @@ where
 
         let mut name = Vec::new();
 
-        while let Some(c) = self.next &&
-            c != '}'
+        while let Some(c) = self.next
+            && c != '}'
         {
             name.push(c);
             self.advance()?;
@@ -573,8 +568,8 @@ where
         match self.next {
             Some('/') => {
                 self.advance()?;
-                while let Some(c) = self.next &&
-                    !matches!(c, '\r' | '\n')
+                while let Some(c) = self.next
+                    && !matches!(c, '\r' | '\n')
                 {
                     value.push(c);
                     self.advance()?;
@@ -586,8 +581,8 @@ where
                 // Lookbehind buffer in which we check if we saw a */
                 let mut lb = RingBuf::new(2);
 
-                while let Some(c) = self.next &&
-                    !matches!(lb.as_slice(), b"*/")
+                while let Some(c) = self.next
+                    && !matches!(lb.as_slice(), b"*/")
                 {
                     value.push(c);
 
@@ -611,7 +606,6 @@ where
             None => self.syntax_error(UnexpectedEof)?,
         }
 
-
         Ok((Comment, value))
     }
 
@@ -621,8 +615,8 @@ where
         // skip #
         self.advance()?;
 
-        while let Some(c) = self.next &&
-            !matches!(c, '\r' | '\n')
+        while let Some(c) = self.next
+            && !matches!(c, '\r' | '\n')
         {
             value.push(c);
             self.advance()?;
@@ -653,8 +647,8 @@ where
         // Lookbehind of how much consecutive tildes we saw
         let mut close_tildes = 0;
 
-        while let Some(c) = self.next &&
-            (!matches!(c, '\r' | '\n') || open_tildes > 2)
+        while let Some(c) = self.next
+            && (!matches!(c, '\r' | '\n') || open_tildes > 2)
         {
             value.push(c);
 
@@ -708,14 +702,9 @@ where
             }),
         };
 
-        Ok(value.map(|(kind, value)| Token {
-            index,
-            kind,
-            value,
-        }))
+        Ok(value.map(|(kind, value)| Token { index, kind, value }))
     }
 }
-
 
 impl<I, E, S> Iterator for Lexer<'_, I, S>
 where
@@ -728,7 +717,6 @@ where
         self.next_token().transpose()
     }
 }
-
 
 #[cfg(test)]
 mod test {

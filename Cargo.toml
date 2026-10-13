@@ -5,6 +5,9 @@ edition = "2024"
 
 [dependencies]
 
+[dependencies.lz4]
+version = "1.28.1"
+
 [dependencies.flate2]
 version = "1.1.10"
 

@@ -42,8 +42,8 @@ where
 {
     tokens: I,
     config: &'a ParseConfig,
-    next:   Option<Token>,
-    index:  u64,
+    next: Option<Token>,
+    index: u64,
 }
 
 macro_rules! consume {
@@ -189,7 +189,6 @@ macro_rules! diverge_ahead {
     };
 }
 
-
 const LEMNISCATE: &[u8] = b"\x22\x1E";
 const LEMNISCATE_F: &[u8] = b"\x22\x1Ef";
 const LEMNISCATE_FF: &[u8] = b"\x22\x1EF";
@@ -217,9 +216,9 @@ const NINFF: Tag = Tag::Float(f32::NEG_INFINITY);
 
 const NO_OPS: Ops = Ops::none();
 const NO_COMMENTS: Comments = Comments {
-    hash:    false,
+    hash: false,
     c_style: false,
-    tildes:  false,
+    tildes: false,
 };
 
 enum Collector {
@@ -272,9 +271,7 @@ where
 
     fn numeral(&self, numeral: String) -> ParseResult<Tag, E> {
         let (nonfinites, inf, nan, infinity, big_nan, lemniscate, sig_nan) = match self.config.nonfinite_floats {
-            NonfiniteFloats::Disabled {
-                ..
-            } => (false, false, false, false, false, false, false),
+            NonfiniteFloats::Disabled { .. } => (false, false, false, false, false, false, false),
 
             NonfiniteFloats::InfinityOnly {
                 js_like,
@@ -354,12 +351,8 @@ where
                     HetrogenousLists::Disallowed => {
                         return self.syntax_error(DisallowedHetrogenousList(id, elem.id()));
                     },
-                    HetrogenousLists::WrapInCompound {
-                        wrap_compounds,
-                    } => (false, wrap_compounds),
-                    HetrogenousLists::WrapInList {
-                        wrap_lists,
-                    } => (true, wrap_lists),
+                    HetrogenousLists::WrapInCompound { wrap_compounds } => (false, wrap_compounds),
+                    HetrogenousLists::WrapInList { wrap_lists } => (true, wrap_lists),
                 };
 
                 let flattened = if into_list {
@@ -682,7 +675,6 @@ where
         }
     }
 }
-
 
 #[cfg(test)]
 mod test {

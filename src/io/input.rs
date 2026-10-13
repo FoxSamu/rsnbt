@@ -7,6 +7,7 @@ use std::io::Result;
 use flate2::read::DeflateDecoder;
 use flate2::read::GzDecoder;
 use flate2::read::ZlibDecoder;
+use lz4::Decoder as Lz4Decoder;
 
 use crate::tag::*;
 
@@ -19,19 +20,22 @@ pub enum Decompression {
     #[default]
     GZip,
     ZLib,
+    Lz4,
     Deflate,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct NbtInputConfig {
-    pub big_endian:           bool,
+    pub big_endian: bool,
     pub allow_empty_end_list: bool,
-    pub max_depth:            usize,
-    pub decompression:        Decompression,
+    pub max_depth: usize,
+    pub decompression: Decompression,
 }
 
 pub fn decode<R>(mut stream: R, config: &NbtInputConfig) -> Result<(String, Tag)>
-where R: Read {
+where
+    R: Read,
+{
     match config.decompression {
         Decompression::Uncompressed => {
             let mut input = NbtInput {
@@ -68,6 +72,15 @@ where R: Read {
 
             input.read_root()
         },
+
+        Decompression::Lz4 => {
+            let mut input = NbtInput {
+                stream: &mut Lz4Decoder::new(stream)?,
+                config,
+            };
+
+            input.read_root()
+        },
     }
 }
 
@@ -76,18 +89,24 @@ pub fn decode_blob(blob: &[u8], config: &NbtInputConfig) -> Result<(String, Tag)
 }
 
 struct NbtInput<'a, 'b, R>
-where R: Read {
+where
+    R: Read,
+{
     stream: &'a mut R,
     config: &'b NbtInputConfig,
 }
 
 fn invalid_data<T, R>(reason: R) -> Result<T>
-where R: Into<String> {
+where
+    R: Into<String>,
+{
     Err(Error::new(ErrorKind::InvalidData, reason.into()))
 }
 
 fn too_large<T, R>(reason: R) -> Result<T>
-where R: Into<String> {
+where
+    R: Into<String>,
+{
     Err(Error::new(ErrorKind::QuotaExceeded, reason.into()))
 }
 
@@ -102,7 +121,8 @@ macro_rules! from_bytes {
 }
 
 impl<'a, 'b, R> NbtInput<'a, 'b, R>
-where R: Read
+where
+    R: Read,
 {
     fn read_tag_id(&mut self) -> Result<Option<TagId>> {
         let mut buf = [0u8];
@@ -317,10 +337,10 @@ mod test {
         let mut file = File::open("../../test_data/test.dat").unwrap();
 
         let config = NbtInputConfig {
-            big_endian:           true,
+            big_endian: true,
             allow_empty_end_list: true,
-            max_depth:            512,
-            decompression:        Decompression::GZip,
+            max_depth: 512,
+            decompression: Decompression::GZip,
         };
 
         let decoded = decode(&mut file, &config).unwrap();

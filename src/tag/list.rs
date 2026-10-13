@@ -698,16 +698,8 @@ from_and_try_into_impl!(ByteArrays, Vec<i8>, |value| value);
 from_and_try_into_impl!(IntArrays, Vec<i32>, |value| value);
 from_and_try_into_impl!(LongArrays, Vec<i64>, |value| value);
 from_and_try_into_impl!(ByteArrays, Vec<u8>, |value| reinterpret_vec!(value, Vec<u8> => Vec<i8>));
-from_and_try_into_impl!(
-    IntArrays,
-    Vec<u32>,
-    |value| reinterpret_vec!(value, Vec<u32> => Vec<i32>)
-);
-from_and_try_into_impl!(
-    LongArrays,
-    Vec<u64>,
-    |value| reinterpret_vec!(value, Vec<u64> => Vec<i64>)
-);
+from_and_try_into_impl!(IntArrays, Vec<u32>, |value| reinterpret_vec!(value, Vec<u32> => Vec<i32>));
+from_and_try_into_impl!(LongArrays, Vec<u64>, |value| reinterpret_vec!(value, Vec<u64> => Vec<i64>));
 from_and_try_into_impl!(Lists, TagList, |value| value);
 from_and_try_into_impl!(Compounds, TagMap, |value| value);
 

@@ -59,7 +59,9 @@ pub struct NbtStats {
 
 impl NbtStats {
     pub fn measure<'a, T>(name: &String, tag: T) -> NbtStats
-    where T: Into<TagRef<'a>> {
+    where
+        T: Into<TagRef<'a>>,
+    {
         let mut stats = NbtStats::default();
         stats.measure_tag(name, tag.into(), 0);
         stats
@@ -203,7 +205,8 @@ impl NbtStats {
 enum Reader<R1, R2>
 where
     R1: Read,
-    R2: Read + Seek, {
+    R2: Read + Seek,
+{
     Unseekable(R1),
     Seekable(R2),
 }
@@ -254,52 +257,50 @@ impl Seek for DummyStream {
 
 impl NbtStats {
     pub fn measure_input<R>(reader: R, compression: Decompression, be: bool) -> Result<NbtStats>
-    where R: Read {
+    where
+        R: Read,
+    {
         let mut stats = NbtStats::default();
 
         match compression {
-            Decompression::Uncompressed => {
-                stats.measure_tag_input(&mut Reader::<_, DummyStream>::Unseekable(reader), 0, be)?
-            },
+            Decompression::Uncompressed => stats.measure_tag_input(&mut Reader::<_, DummyStream>::Unseekable(reader), 0, be)?,
             Decompression::GZip => {
                 stats.measure_tag_input(&mut Reader::<_, DummyStream>::Unseekable(GzDecoder::new(reader)), 0, be)?
             },
-            Decompression::ZLib => stats.measure_tag_input(
-                &mut Reader::<_, DummyStream>::Unseekable(ZlibDecoder::new(reader)),
-                0,
-                be,
-            )?,
-            Decompression::Deflate => stats.measure_tag_input(
-                &mut Reader::<_, DummyStream>::Unseekable(DeflateDecoder::new(reader)),
-                0,
-                be,
-            )?,
+            Decompression::ZLib => {
+                stats.measure_tag_input(&mut Reader::<_, DummyStream>::Unseekable(ZlibDecoder::new(reader)), 0, be)?
+            },
+            Decompression::Deflate => {
+                stats.measure_tag_input(&mut Reader::<_, DummyStream>::Unseekable(DeflateDecoder::new(reader)), 0, be)?
+            },
+            Decompression::Lz4 => {
+                stats.measure_tag_input(&mut Reader::<_, DummyStream>::Unseekable(lz4::Decoder::new(reader)?), 0, be)?
+            },
         };
 
         Ok(stats)
     }
 
     pub fn measure_input_seek<R>(reader: R, compression: Decompression, be: bool) -> Result<NbtStats>
-    where R: Read + Seek {
+    where
+        R: Read + Seek,
+    {
         let mut stats = NbtStats::default();
 
         match compression {
-            Decompression::Uncompressed => {
-                stats.measure_tag_input(&mut Reader::<DummyStream, _>::Seekable(reader), 0, be)?
-            },
+            Decompression::Uncompressed => stats.measure_tag_input(&mut Reader::<DummyStream, _>::Seekable(reader), 0, be)?,
             Decompression::GZip => {
                 stats.measure_tag_input(&mut Reader::<_, DummyStream>::Unseekable(GzDecoder::new(reader)), 0, be)?
             },
-            Decompression::ZLib => stats.measure_tag_input(
-                &mut Reader::<_, DummyStream>::Unseekable(ZlibDecoder::new(reader)),
-                0,
-                be,
-            )?,
-            Decompression::Deflate => stats.measure_tag_input(
-                &mut Reader::<_, DummyStream>::Unseekable(DeflateDecoder::new(reader)),
-                0,
-                be,
-            )?,
+            Decompression::ZLib => {
+                stats.measure_tag_input(&mut Reader::<_, DummyStream>::Unseekable(ZlibDecoder::new(reader)), 0, be)?
+            },
+            Decompression::Deflate => {
+                stats.measure_tag_input(&mut Reader::<_, DummyStream>::Unseekable(DeflateDecoder::new(reader)), 0, be)?
+            },
+            Decompression::Lz4 => {
+                stats.measure_tag_input(&mut Reader::<_, DummyStream>::Unseekable(lz4::Decoder::new(reader)?), 0, be)?
+            },
         };
 
         Ok(stats)
@@ -312,7 +313,8 @@ impl NbtStats {
     fn read_tag_id<R1, R2>(&mut self, reader: &mut Reader<R1, R2>) -> Result<Option<TagId>>
     where
         R1: Read,
-        R2: Read + Seek, {
+        R2: Read + Seek,
+    {
         let byte = reader.read::<1>()?;
         self.bytes += 1;
 
@@ -329,7 +331,8 @@ impl NbtStats {
     fn skip_and_count_bytes<R1, R2>(&mut self, reader: &mut Reader<R1, R2>, bytes: i64) -> Result<()>
     where
         R1: Read,
-        R2: Read + Seek, {
+        R2: Read + Seek,
+    {
         reader.skip(bytes)?;
         self.bytes += bytes as usize;
 
@@ -339,11 +342,16 @@ impl NbtStats {
     fn measure_string_input<R1, R2>(&mut self, reader: &mut Reader<R1, R2>, be: bool) -> Result<()>
     where
         R1: Read,
-        R2: Read + Seek, {
+        R2: Read + Seek,
+    {
         let len_bytes = reader.read::<2>()?;
         self.bytes += 2;
 
-        let len = if be { u16::from_be_bytes(len_bytes) } else { u16::from_le_bytes(len_bytes) };
+        let len = if be {
+            u16::from_be_bytes(len_bytes)
+        } else {
+            u16::from_le_bytes(len_bytes)
+        };
 
         self.bytes += len as usize;
         self.longest_string = self.longest_string.max(len as usize);
@@ -354,11 +362,16 @@ impl NbtStats {
     fn get_length<R1, R2>(&mut self, reader: &mut Reader<R1, R2>, be: bool) -> Result<i32>
     where
         R1: Read,
-        R2: Read + Seek, {
+        R2: Read + Seek,
+    {
         let len_bytes = reader.read::<4>()?;
         self.bytes += 4;
 
-        let len = if be { i32::from_be_bytes(len_bytes) } else { i32::from_le_bytes(len_bytes) };
+        let len = if be {
+            i32::from_be_bytes(len_bytes)
+        } else {
+            i32::from_le_bytes(len_bytes)
+        };
 
         Ok(len)
     }
@@ -366,7 +379,8 @@ impl NbtStats {
     fn measure_tag_input<R1, R2>(&mut self, reader: &mut Reader<R1, R2>, depth: usize, be: bool) -> Result<bool>
     where
         R1: Read,
-        R2: Read + Seek, {
+        R2: Read + Seek,
+    {
         let id = match self.read_tag_id(reader)? {
             None => return Ok(false),
             Some(id) => id,
@@ -378,13 +392,7 @@ impl NbtStats {
         Ok(true)
     }
 
-    fn measure_payload_input<R1, R2>(
-        &mut self,
-        reader: &mut Reader<R1, R2>,
-        depth: usize,
-        be: bool,
-        id: TagId,
-    ) -> Result<()>
+    fn measure_payload_input<R1, R2>(&mut self, reader: &mut Reader<R1, R2>, depth: usize, be: bool, id: TagId) -> Result<()>
     where
         R1: Read,
         R2: Read + Seek,

@@ -465,14 +465,12 @@ impl ParseConfig {
 
             ops: Ops::minecraft(),
 
-            hetrogenous_lists: HetrogenousLists::WrapInCompound {
-                wrap_compounds: false
-            },
+            hetrogenous_lists: HetrogenousLists::WrapInCompound { wrap_compounds: false },
 
             comments: Comments {
-                hash:    false,
+                hash: false,
                 c_style: false,
-                tildes:  false,
+                tildes: false,
             },
 
             extra_commas: ExtraCommas::SingleTrailing,
@@ -482,18 +480,18 @@ impl ParseConfig {
             string_format: StringFormat::minecraft(),
 
             integer_format: IntegerFormat {
-                allow_unsigned:    true,
-                allow_booleans:    true,
+                allow_unsigned: true,
+                allow_booleans: true,
                 allow_hex_and_bin: true,
             },
 
             name_format: NameFormat::AnyWord,
 
             array_format: ArrayFormat {
-                allow_spaced_prefix:    true,
+                allow_spaced_prefix: true,
                 allow_lowercase_prefix: false,
-                allow_booleans:         false,
-                allow_coercion:         true,
+                allow_booleans: false,
+                allow_coercion: true,
             },
 
             allow_equals_sign: false,
@@ -513,9 +511,9 @@ impl ParseConfig {
             hetrogenous_lists: HetrogenousLists::Disallowed,
 
             comments: Comments {
-                hash:    true,
+                hash: true,
                 c_style: false,
-                tildes:  false,
+                tildes: false,
             },
 
             extra_commas: ExtraCommas::Anywhere,
@@ -525,18 +523,18 @@ impl ParseConfig {
             string_format: StringFormat::ftb(),
 
             integer_format: IntegerFormat {
-                allow_unsigned:    true,
-                allow_booleans:    true,
+                allow_unsigned: true,
+                allow_booleans: true,
                 allow_hex_and_bin: true,
             },
 
             name_format: NameFormat::AnyWord,
 
             array_format: ArrayFormat {
-                allow_spaced_prefix:    true,
+                allow_spaced_prefix: true,
                 allow_lowercase_prefix: true,
-                allow_booleans:         false,
-                allow_coercion:         true,
+                allow_booleans: false,
+                allow_coercion: true,
             },
 
             allow_equals_sign: true,
@@ -550,14 +548,12 @@ impl ParseConfig {
 
             ops: Ops::all(),
 
-            hetrogenous_lists: HetrogenousLists::WrapInCompound {
-                wrap_compounds: false
-            },
+            hetrogenous_lists: HetrogenousLists::WrapInCompound { wrap_compounds: false },
 
             comments: Comments {
-                hash:    true,
+                hash: true,
                 c_style: true,
-                tildes:  true,
+                tildes: true,
             },
 
             extra_commas: ExtraCommas::Anywhere,
@@ -567,18 +563,18 @@ impl ParseConfig {
             string_format: StringFormat::lenient(),
 
             integer_format: IntegerFormat {
-                allow_unsigned:    true,
-                allow_booleans:    true,
+                allow_unsigned: true,
+                allow_booleans: true,
                 allow_hex_and_bin: true,
             },
 
             name_format: NameFormat::AnyWord,
 
             array_format: ArrayFormat {
-                allow_spaced_prefix:    true,
+                allow_spaced_prefix: true,
                 allow_lowercase_prefix: true,
-                allow_booleans:         true,
-                allow_coercion:         true,
+                allow_booleans: true,
+                allow_coercion: true,
             },
 
             allow_equals_sign: true,
@@ -589,162 +585,162 @@ impl ParseConfig {
 impl StringFormat {
     pub const fn old_minecraft() -> Self {
         Self {
-            allow_identifiers:         true,
-            single_quotes:             true,
-            double_quotes:             true,
-            ignnore_invalid_escapes:   true,
-            esc_nul:                   false,
-            esc_single_quote:          false,
-            esc_double_quote:          false,
-            esc_slash:                 false,
-            esc_backslash:             false,
-            esc_lf:                    false,
-            esc_cr:                    false,
-            esc_ff:                    false,
-            esc_space:                 false,
-            esc_tab:                   false,
-            esc_bs:                    false,
-            esc_unicode_8:             false,
-            esc_unicode_16:            false,
-            esc_unicode_32:            false,
-            esc_unicode_name:          false,
-            esc_chars:                 false,
-            allow_line_breaks:         false,
+            allow_identifiers: true,
+            single_quotes: true,
+            double_quotes: true,
+            ignnore_invalid_escapes: true,
+            esc_nul: false,
+            esc_single_quote: false,
+            esc_double_quote: false,
+            esc_slash: false,
+            esc_backslash: false,
+            esc_lf: false,
+            esc_cr: false,
+            esc_ff: false,
+            esc_space: false,
+            esc_tab: false,
+            esc_bs: false,
+            esc_unicode_8: false,
+            esc_unicode_16: false,
+            esc_unicode_32: false,
+            esc_unicode_name: false,
+            esc_chars: false,
+            allow_line_breaks: false,
             allow_escaped_line_breaks: false,
         }
     }
 
     pub const fn minecraft() -> Self {
         Self {
-            allow_identifiers:         true,
-            single_quotes:             true,
-            double_quotes:             true,
-            ignnore_invalid_escapes:   false,
-            esc_nul:                   false,
-            esc_single_quote:          true,
-            esc_double_quote:          true,
-            esc_slash:                 false,
-            esc_backslash:             true,
-            esc_lf:                    true,
-            esc_cr:                    true,
-            esc_ff:                    true,
-            esc_space:                 false,
-            esc_tab:                   true,
-            esc_bs:                    true,
-            esc_unicode_8:             true,
-            esc_unicode_16:            true,
-            esc_unicode_32:            true,
-            esc_unicode_name:          true,
-            esc_chars:                 false,
-            allow_line_breaks:         false,
+            allow_identifiers: true,
+            single_quotes: true,
+            double_quotes: true,
+            ignnore_invalid_escapes: false,
+            esc_nul: false,
+            esc_single_quote: true,
+            esc_double_quote: true,
+            esc_slash: false,
+            esc_backslash: true,
+            esc_lf: true,
+            esc_cr: true,
+            esc_ff: true,
+            esc_space: false,
+            esc_tab: true,
+            esc_bs: true,
+            esc_unicode_8: true,
+            esc_unicode_16: true,
+            esc_unicode_32: true,
+            esc_unicode_name: true,
+            esc_chars: false,
+            allow_line_breaks: false,
             allow_escaped_line_breaks: false,
         }
     }
 
     pub const fn ftb() -> Self {
         Self {
-            allow_identifiers:         true,
-            single_quotes:             true,
-            double_quotes:             true,
-            ignnore_invalid_escapes:   false,
-            esc_nul:                   false,
-            esc_single_quote:          false,
-            esc_double_quote:          true,
-            esc_slash:                 false,
-            esc_backslash:             true,
-            esc_lf:                    true,
-            esc_cr:                    true,
-            esc_ff:                    true,
-            esc_space:                 true,
-            esc_tab:                   true,
-            esc_bs:                    true,
-            esc_unicode_8:             false,
-            esc_unicode_16:            false,
-            esc_unicode_32:            false,
-            esc_unicode_name:          false,
-            esc_chars:                 false,
-            allow_line_breaks:         false,
+            allow_identifiers: true,
+            single_quotes: true,
+            double_quotes: true,
+            ignnore_invalid_escapes: false,
+            esc_nul: false,
+            esc_single_quote: false,
+            esc_double_quote: true,
+            esc_slash: false,
+            esc_backslash: true,
+            esc_lf: true,
+            esc_cr: true,
+            esc_ff: true,
+            esc_space: true,
+            esc_tab: true,
+            esc_bs: true,
+            esc_unicode_8: false,
+            esc_unicode_16: false,
+            esc_unicode_32: false,
+            esc_unicode_name: false,
+            esc_chars: false,
+            allow_line_breaks: false,
             allow_escaped_line_breaks: false,
         }
     }
 
     pub const fn lenient() -> Self {
         Self {
-            allow_identifiers:         true,
-            single_quotes:             true,
-            double_quotes:             true,
-            ignnore_invalid_escapes:   false,
-            esc_nul:                   true,
-            esc_single_quote:          true,
-            esc_double_quote:          true,
-            esc_slash:                 true,
-            esc_backslash:             true,
-            esc_lf:                    true,
-            esc_cr:                    true,
-            esc_ff:                    true,
-            esc_space:                 true,
-            esc_tab:                   true,
-            esc_bs:                    true,
-            esc_unicode_8:             true,
-            esc_unicode_16:            true,
-            esc_unicode_32:            true,
-            esc_unicode_name:          true,
-            esc_chars:                 false,
-            allow_line_breaks:         true,
+            allow_identifiers: true,
+            single_quotes: true,
+            double_quotes: true,
+            ignnore_invalid_escapes: false,
+            esc_nul: true,
+            esc_single_quote: true,
+            esc_double_quote: true,
+            esc_slash: true,
+            esc_backslash: true,
+            esc_lf: true,
+            esc_cr: true,
+            esc_ff: true,
+            esc_space: true,
+            esc_tab: true,
+            esc_bs: true,
+            esc_unicode_8: true,
+            esc_unicode_16: true,
+            esc_unicode_32: true,
+            esc_unicode_name: true,
+            esc_chars: false,
+            allow_line_breaks: true,
             allow_escaped_line_breaks: true,
         }
     }
 
     pub const fn json() -> Self {
         Self {
-            allow_identifiers:         false,
-            single_quotes:             false,
-            double_quotes:             true,
-            ignnore_invalid_escapes:   false,
-            esc_nul:                   false,
-            esc_single_quote:          true,
-            esc_double_quote:          true,
-            esc_slash:                 true,
-            esc_backslash:             true,
-            esc_lf:                    true,
-            esc_cr:                    true,
-            esc_ff:                    true,
-            esc_space:                 false,
-            esc_tab:                   true,
-            esc_bs:                    true,
-            esc_unicode_8:             false,
-            esc_unicode_16:            true,
-            esc_unicode_32:            false,
-            esc_unicode_name:          false,
-            esc_chars:                 false,
-            allow_line_breaks:         false,
+            allow_identifiers: false,
+            single_quotes: false,
+            double_quotes: true,
+            ignnore_invalid_escapes: false,
+            esc_nul: false,
+            esc_single_quote: true,
+            esc_double_quote: true,
+            esc_slash: true,
+            esc_backslash: true,
+            esc_lf: true,
+            esc_cr: true,
+            esc_ff: true,
+            esc_space: false,
+            esc_tab: true,
+            esc_bs: true,
+            esc_unicode_8: false,
+            esc_unicode_16: true,
+            esc_unicode_32: false,
+            esc_unicode_name: false,
+            esc_chars: false,
+            allow_line_breaks: false,
             allow_escaped_line_breaks: false,
         }
     }
 
     pub const fn json5_like() -> Self {
         Self {
-            allow_identifiers:         false,
-            single_quotes:             true,
-            double_quotes:             true,
-            ignnore_invalid_escapes:   false,
-            esc_nul:                   true,
-            esc_single_quote:          true,
-            esc_double_quote:          true,
-            esc_slash:                 true,
-            esc_backslash:             true,
-            esc_lf:                    true,
-            esc_cr:                    true,
-            esc_ff:                    true,
-            esc_space:                 false,
-            esc_tab:                   true,
-            esc_bs:                    true,
-            esc_unicode_8:             true,
-            esc_unicode_16:            true,
-            esc_unicode_32:            false,
-            esc_unicode_name:          false,
-            esc_chars:                 true,
-            allow_line_breaks:         false,
+            allow_identifiers: false,
+            single_quotes: true,
+            double_quotes: true,
+            ignnore_invalid_escapes: false,
+            esc_nul: true,
+            esc_single_quote: true,
+            esc_double_quote: true,
+            esc_slash: true,
+            esc_backslash: true,
+            esc_lf: true,
+            esc_cr: true,
+            esc_ff: true,
+            esc_space: false,
+            esc_tab: true,
+            esc_bs: true,
+            esc_unicode_8: true,
+            esc_unicode_16: true,
+            esc_unicode_32: false,
+            esc_unicode_name: false,
+            esc_chars: true,
+            allow_line_breaks: false,
             allow_escaped_line_breaks: true,
         }
     }
@@ -760,40 +756,40 @@ impl NonfiniteFloats {
     pub const fn ftb() -> Self {
         Self::Enabled {
             allow_too_large_finite: true,
-            signed_nan:             false,
-            js_like:                true,
-            rust_like:              false,
-            lemniscate:             true,
+            signed_nan: false,
+            js_like: true,
+            rust_like: false,
+            lemniscate: true,
         }
     }
 
     pub const fn lenient() -> Self {
         Self::Enabled {
             allow_too_large_finite: true,
-            signed_nan:             true,
-            js_like:                true,
-            rust_like:              true,
-            lemniscate:             true,
+            signed_nan: true,
+            js_like: true,
+            rust_like: true,
+            lemniscate: true,
         }
     }
 
     pub const fn rust() -> Self {
         Self::Enabled {
             allow_too_large_finite: true,
-            signed_nan:             true,
-            js_like:                false,
-            rust_like:              true,
-            lemniscate:             false,
+            signed_nan: true,
+            js_like: false,
+            rust_like: true,
+            lemniscate: false,
         }
     }
 
     pub const fn json5() -> Self {
         Self::Enabled {
             allow_too_large_finite: true,
-            signed_nan:             true,
-            js_like:                true,
-            rust_like:              false,
-            lemniscate:             false,
+            signed_nan: true,
+            js_like: true,
+            rust_like: false,
+            lemniscate: false,
         }
     }
 }
@@ -801,28 +797,28 @@ impl NonfiniteFloats {
 impl Ops {
     pub const fn minecraft() -> Self {
         Self {
-            bool:   true,
-            uuid:   true,
+            bool: true,
+            uuid: true,
             base64: false,
-            pack:   false,
+            pack: false,
         }
     }
 
     pub const fn all() -> Self {
         Self {
-            bool:   true,
-            uuid:   true,
+            bool: true,
+            uuid: true,
             base64: true,
-            pack:   true,
+            pack: true,
         }
     }
 
     pub const fn none() -> Self {
         Self {
-            bool:   false,
-            uuid:   false,
+            bool: false,
+            uuid: false,
             base64: false,
-            pack:   false,
+            pack: false,
         }
     }
 }
