@@ -1,3 +1,4 @@
+use std::fs::File;
 use std::io;
 use std::io::Cursor;
 use std::io::Error;
@@ -6,6 +7,7 @@ use std::io::Read;
 use std::io::Seek;
 use std::io::SeekFrom;
 use std::io::Write;
+use std::path::Path;
 
 use crate::io::Decompression;
 use crate::io::NbtInputConfig;
@@ -183,19 +185,28 @@ impl ChunkBlob {
 
 
 
-pub struct RegionFile<F> where F : Read + Write + Seek {
+pub struct RegionFile<F> {
     file: F,
     header: RegionHeader,
     sectors: BitArray
 }
 
-impl<F> RegionFile<F> where F : Read + Write + Seek {
-    pub fn open(mut file: F) -> io::Result<Self> {
-        if file.seek(SeekFrom::End(0))? == 0 {
-            // Empty file
-            return Self::create(file);
-        }
+impl RegionFile<File> {
+    pub fn open_file<P>(path: P) -> io::Result<Self> where P : AsRef<Path> {
+        Self::open(File::open(path)?)
+    }
 
+    pub fn create_file<P>(path: P) -> io::Result<Self> where P : AsRef<Path> {
+        Self::create(File::create(path)?)
+    }
+
+    pub fn overwrite_file<P>(path: P) -> io::Result<Self> where P : AsRef<Path> {
+        Self::overwrite(File::create(path)?)
+    }
+}
+
+impl<F> RegionFile<F> where F : Read + Seek {
+    pub fn open(mut file: F) -> io::Result<Self> {
         let mut header = RegionHeader::new();
 
         file.seek(SeekFrom::Start(0))?;
@@ -215,50 +226,6 @@ impl<F> RegionFile<F> where F : Read + Write + Seek {
             header,
             sectors
         })
-    }
-
-    pub fn create(mut file: F) -> io::Result<Self> {
-        let header = RegionHeader::new();
-
-        file.seek(SeekFrom::Start(0))?;
-        header.write(&mut file)?;
-
-        Ok(Self {
-            file,
-            header,
-            sectors: BitArray::new()
-        })
-    }
-
-    pub fn clear(&mut self) -> io::Result<()> {
-        self.header.clear();
-        self.sectors.clear();
-
-        self.file.seek(SeekFrom::Start(0))?;
-        self.header.write(&mut self.file)?;
-
-        Ok(())
-    }
-
-    pub fn delete_by_index(&mut self, index: usize) -> io::Result<()> {
-        let ch = self.header.get_chunk_by_index(index)?;
-        self.sectors.reset_range(
-            ch.offset as usize, 
-            ch.offset as usize + ch.length as usize
-        );
-
-        self.header.delete_chunk_by_index(index)?;
-
-        self.file.seek(SeekFrom::Start(0))?;
-        self.header.write(&mut self.file)?;
-
-        Ok(())
-    }
-
-    pub fn delete(&mut self, x: u32, z: u32) -> io::Result<()> {
-        let x = (x & 31) as usize;
-        let z = (z & 31) as usize;
-        self.delete_by_index(z * 32 + x)
     }
 
     pub fn header_by_index(&mut self, index: usize) -> io::Result<Option<ChunkHeader>> {
@@ -330,6 +297,61 @@ impl<F> RegionFile<F> where F : Read + Write + Seek {
         let x = (x & 31) as usize;
         let z = (z & 31) as usize;
         self.load_by_index(z * 32 + x)
+    }
+}
+
+
+impl<F> RegionFile<F> where F : Read + Seek + Write {
+    pub fn create(mut file: F) -> io::Result<Self> {
+        if file.seek(SeekFrom::End(0))? == 0 {
+            Self::overwrite(file)
+        } else {
+            Self::open(file)
+        }
+    }
+
+    pub fn overwrite(mut file: F) -> io::Result<Self> {
+        let header = RegionHeader::new();
+
+        file.seek(SeekFrom::Start(0))?;
+        header.write(&mut file)?;
+
+        Ok(Self {
+            file,
+            header,
+            sectors: BitArray::new()
+        })
+    }
+
+    pub fn clear(&mut self) -> io::Result<()> {
+        self.header.clear();
+        self.sectors.clear();
+
+        self.file.seek(SeekFrom::Start(0))?;
+        self.header.write(&mut self.file)?;
+
+        Ok(())
+    }
+
+    pub fn delete_by_index(&mut self, index: usize) -> io::Result<()> {
+        let ch = self.header.get_chunk_by_index(index)?;
+        self.sectors.reset_range(
+            ch.offset as usize, 
+            ch.offset as usize + ch.length as usize
+        );
+
+        self.header.delete_chunk_by_index(index)?;
+
+        self.file.seek(SeekFrom::Start(0))?;
+        self.header.write(&mut self.file)?;
+
+        Ok(())
+    }
+
+    pub fn delete(&mut self, x: u32, z: u32) -> io::Result<()> {
+        let x = (x & 31) as usize;
+        let z = (z & 31) as usize;
+        self.delete_by_index(z * 32 + x)
     }
 
     fn reallocate_chunk_sectors(&mut self, index: usize, num_sectors: u8) -> io::Result<u32> {
@@ -522,4 +544,3 @@ impl<F> RegionFile<F> where F : Read + Write + Seek {
         self.store_external_by_index(z * 32 + x, update_timestamp, mode)
     }
 }
-

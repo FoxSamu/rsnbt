@@ -1,7 +1,7 @@
-use std::fs;
-use std::fs::File;
-use std::io;
-use std::io::Write;
+#![cfg(feature = "region")]
+
+use std::fs::{self, File};
+use std::io::{self, Write};
 
 use rsnbt::region::RegionFile;
 
@@ -13,8 +13,7 @@ fn test_region() -> io::Result<()> {
     //
     // This test should fail if the chunk did not load correctly
 
-    let file = File::open("data/region/r.0.0.mca")?;
-    let mut region = RegionFile::open(file)?;
+    let mut region = RegionFile::open_file("data/region/r.0.0.mca")?;
 
     let header = region.header(6, 4)?.unwrap();
     dbg!(header);

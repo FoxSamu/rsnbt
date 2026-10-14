@@ -9,7 +9,7 @@ pub mod snbt;
 #[cfg(feature = "lz4b")]
 pub mod lz4b;
 
-#[cfg(feature = "mca")]
+#[cfg(feature = "region")]
 pub mod region;
 
 #[macro_use]

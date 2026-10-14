@@ -25,4 +25,4 @@ optional = true
 [features]
 snbt = ["dep:unicode_names"]
 lz4b = ["dep:xxh"]
-mca  = ["lz4b"]
+region  = ["lz4b"]
