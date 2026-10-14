@@ -17,5 +17,3 @@ pub mod map;
 pub use map::TagMap;
 pub use map::tag_map;
 
-// this used to be in this module
-pub(self) use super::unsafe_ops;

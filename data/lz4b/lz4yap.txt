@@ -1,0 +1,141 @@
+LZ4 is a lossless compression algorithm created by Yann Collet in 2011. It belongs to the LZ77 family of
+compressors, which work by finding repeated sequences of bytes in data and replacing later occurrences
+with short references back to earlier ones. The central design goal of LZ4 is speed. It does not try to
+squeeze every last byte out of your data. Instead, it aims to compress and decompress so quickly that
+the cost of using it is almost negligible, often faster than the storage or network it is feeding.
+
+# The Basic Idea
+Imagine you have a file containing the sentence “the quick brown fox jumps over the lazy dog, and then
+the quick brown fox jumps over the lazy dog again.” The second occurrence of “the quick brown fox jumps
+over the lazy dog” is identical to the first. Rather than storing it twice, a compressor can store the
+first copy literally and then write a small note saying “go back 47 bytes and copy 43 bytes from there.”
+That note is called a match, and it takes far less space than the original text. This is the heart of
+every LZ77-style compressor, and LZ4 is no exception.
+
+The data in an LZ4 block is organized into sequences. Each sequence consists of a token byte, optional
+extra length bytes for literals, the literals themselves, a two-byte offset, and optional extra length
+bytes for the match. The token byte is split into two four-bit fields: the high four bits describe how
+many literal bytes follow, and the low four bits describe the match length minus a minimum of four. If
+either field is 15, additional bytes follow, each adding up to 255 to the length, until a byte smaller
+than 255 terminates the chain.
+
+# Why It Is So Fast
+LZ4 achieves its speed through a number of deliberate trade-offs. First, it uses a very simple hash
+table to find match candidates. When compressing, it takes four bytes at the current position, hashes
+them, and looks up the hash table to see whether the same four bytes occurred recently. If so, it checks
+whether the candidate really matches and extends the match as far as possible. If not, it moves on.
+There is no elaborate search through a chain of candidates, no lazy evaluation, and no entropy coding
+stage afterward. Many other compressors such as zlib, zstd, and brotli follow the LZ stage with Huffman
+coding or finite state entropy coding, which improves the ratio but costs time. LZ4 skips that step
+entirely.
+
+Second, the format is byte-aligned. Everything in an LZ4 stream falls on byte boundaries, so decoding
+never has to shift bits around or maintain a bit buffer. The decompressor is essentially a tight loop:
+read a token, copy some literals, read an offset, copy some match bytes, repeat. On modern CPUs this
+loop can run at multiple gigabytes per second per core, often limited by memory bandwidth rather than
+computation.
+
+Third, LZ4 has an acceleration mechanism. When the compressor goes through stretches of data that do not
+contain matches, such as already-compressed or random data, it progressively skips ahead faster,
+checking fewer positions. This keeps the worst case from being painfully slow and makes it quick to give
+up on incompressible data.
+
+# Compression Ratio Versus Speed
+Typical compression ratios for LZ4 on text-like data fall around two to one, which is noticeably weaker
+than gzip at its default setting or zstd at moderate levels. On the other hand, compression speeds
+regularly exceed 500 megabytes per second per core, and decompression speeds frequently exceed 2
+gigabytes per second per core. For many real workloads this is a fantastic deal. If your disk can only
+write at 500 megabytes per second and LZ4 can compress at 700, then compressing before writing is
+effectively free, and you get a smaller footprint as a bonus.
+
+There is also LZ4 HC, which stands for high compression. This variant spends considerably more time
+searching for better matches, using hash chains or binary trees to examine many candidates. The output
+is still a standard LZ4 stream that any LZ4 decoder can read, and decompression speed remains just as
+fast. You are trading compression time for a better ratio, typically gaining another ten to twenty
+percent in size reduction. This is ideal for data that is compressed once and decompressed many times,
+such as game assets, firmware images, or package distributions.
+
+# The Frame Format
+Raw LZ4 blocks are limited and not self-describing, so Yann Collet also defined an LZ4 frame format. A
+frame begins with a magic number, 0x184D2204, followed by a frame descriptor that specifies flags such
+as whether blocks are independent or linked, whether checksums are present, and the maximum block size,
+which can be 64 kilobytes, 256 kilobytes, 1 megabyte, or 4 megabytes. After the descriptor come the data
+blocks, each prefixed by a four-byte size field whose top bit indicates whether the block is stored
+uncompressed. An end marker of zero follows, and optionally a content checksum calculated with xxHash32,
+another project by the same author.
+
+Linked blocks let later blocks reference data from earlier blocks, improving compression ratios at the
+cost of parallelism. Independent blocks can be compressed and decompressed in parallel, which is
+wonderful for multithreaded tools. The frame format is what the command line lz4 utility produces, and
+it is what you get when you compress a file and end up with a .lz4 extension.
+
+# Where LZ4 Is Used
+LZ4 has been adopted astonishingly widely. The Linux kernel includes it as a compression option for the
+SquashFS filesystem, for zram swap devices, for Btrfs, and for kernel image compression. The ZFS
+filesystem uses LZ4 as its default compression algorithm because it is so cheap that it often improves
+throughput rather than reducing it. Databases such as Cassandra, RocksDB, and ClickHouse use LZ4 for
+compressing data blocks. Apache Kafka supports LZ4 for message batches. Game engines use it to compress
+textures, meshes, and save files. Network protocols and RPC systems use it to reduce bandwidth while
+keeping latency low. Even Android and various browsers rely on it in internal components.
+
+Part of the reason for this ubiquity is the permissive licensing. The core library is released under a
+BSD license, so it can be embedded in proprietary software without friction, while the command line
+tools are under GPL. The code is also compact, portable C, which has been ported to nearly every
+language you can think of, including Java, Rust, Go, Python, C#, JavaScript, and many more.
+
+# Comparison With Other Algorithms
+Snappy, developed by Google, is the closest comparable. Both are byte-oriented LZ77 variants optimized
+for speed, and both skip entropy coding. LZ4 usually decompresses faster than Snappy and achieves a
+slightly better ratio, although results depend on the data and the CPU. LZO is an older relative with a
+similar philosophy. Zstandard, also from Yann Collet during his time at Facebook, sits in a different
+spot on the curve: it includes entropy coding and offers a very wide range of levels, from fast modes
+that approach LZ4 in speed to high levels that rival xz in ratio. If you want maximum speed and minimal
+CPU use, choose LZ4. If you want the best balance and flexibility, zstd is often the better pick. Many
+systems actually use both: LZ4 for hot data and zstd for cold data.
+
+Deflate, the algorithm behind gzip and zip, is much slower to decompress, typically a few hundred
+megabytes per second, because of its Huffman decoding stage. Bzip2 and xz are slower still but achieve
+higher ratios, which suits archival use rather than interactive use.
+
+# Quirks and Limits
+LZ4 uses a sliding window of 64 kilobytes, because match offsets are encoded in just two bytes. That
+means it cannot find matches farther back than 65,535 bytes. For data where repetition occurs at larger
+distances, such as a big log file with repeated entries far apart, a compressor with a larger window
+will achieve better ratios. The minimum match length is four bytes, and there are end-of-block
+restrictions: the last five bytes of a block must be literals, and the last match must start at least
+twelve bytes before the end. These rules exist so the decoder can use fast wild copies without worrying
+about reading or writing beyond buffer boundaries.
+
+Another subtle property is that overlapping matches are allowed. If the offset is smaller than the match
+length, the decoder copies bytes that it has only just written, which naturally expands run-length
+patterns. For example, an offset of one with a match length of one hundred repeats the previous byte one
+hundred times. This elegant trick gives LZ4 run-length encoding behavior for free.
+
+# Tips for Using It
+If you are experimenting, try the command line tool. Running lz4 on a file produces a compressed copy,
+and lz4 -d decompresses it. The flag -1 is the default fast mode, while -9 uses the HC compressor, and
+higher numbers up to -12 push for the best ratio at the cost of time. There is also a benchmark mode,
+lz4 -b, which runs the algorithm over your file and reports speeds and ratios, letting you see how it
+performs on your own data.
+
+When you test with this text, note that natural language prose compresses moderately, because words and
+phrases repeat. This document deliberately repeats certain terms such as compression, decompression,
+speed, ratio, block, match, literal, offset, and token, which gives LZ4 plenty of material to work with.
+If you want to see higher ratios, paste it several times in a row, and you will watch the compressed
+size barely grow, since every repeat becomes a handful of match sequences pointing back at the first
+copy. That is the same effect that makes log files, JSON documents, and source code compress so nicely:
+structure repeats, and LZ4 snaps it up at lightning speed.
+
+# Closing Thoughts
+LZ4 is a wonderful example of a tool that does one thing and does it extremely well. It does not try to
+be everything. It accepts a modest compression ratio in exchange for blistering speed, simplicity, and
+predictability. In a world where CPUs are fast but memory and I/O are comparatively slow, trading a few
+cycles for fewer bytes moved is almost always a win, and LZ4 makes that trade as cheap as it can
+possibly be. Whether you are storing terabytes in a filesystem, shipping messages through a broker,
+loading levels in a game, or just testing compression on a long rambling sample text, LZ4 is a reliable,
+fast, and elegant choice.
+
+The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick
+brown fox jumps over the lazy dog. Compression, decompression, speed, ratio, block, match, literal,
+offset, token. Compression, decompression, speed, ratio, block, match, literal, offset, token.
+

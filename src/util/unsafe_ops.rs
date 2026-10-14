@@ -67,7 +67,7 @@ pub unsafe fn hyper_unsafe_reinterpret_vec<T, U>(v: Vec<T>) -> Vec<U> {
 macro_rules! reinterpret_array {
     ($slice:expr, $from:ty => $to:ty) => {
         unsafe {
-            use $crate::unsafe_ops::*;
+            use $crate::util::unsafe_ops::*;
 
             const {
                 assert!(
@@ -101,7 +101,7 @@ macro_rules! reinterpret_array {
 macro_rules! reinterpret_array_ref {
     ($slice:expr, $from:ty => $to:ty) => {
         unsafe {
-            use $crate::unsafe_ops::*;
+            use $crate::util::unsafe_ops::*;
 
             const {
                 assert!(
@@ -134,7 +134,7 @@ macro_rules! reinterpret_array_ref {
 macro_rules! reinterpret_slice {
     ($slice:expr, $from:ty => $to:ty) => {
         unsafe {
-            use $crate::unsafe_ops::*;
+            use $crate::util::unsafe_ops::*;
 
             const {
                 assert!(
@@ -167,7 +167,7 @@ macro_rules! reinterpret_slice {
 macro_rules! reinterpret_vec {
     ($vec:expr, $from:ty => $to:ty) => {
         unsafe {
-            use $crate::unsafe_ops::*;
+            use $crate::util::unsafe_ops::*;
 
             const {
                 assert!(
@@ -186,10 +186,10 @@ macro_rules! reinterpret_vec {
 
 use std::mem::ManuallyDrop;
 
-pub(super) use reinterpret_array;
-pub(super) use reinterpret_array_ref;
-pub(super) use reinterpret_slice;
-pub(super) use reinterpret_vec;
+pub(crate) use reinterpret_array;
+pub(crate) use reinterpret_array_ref;
+pub(crate) use reinterpret_slice;
+pub(crate) use reinterpret_vec;
 
 #[cfg(test)]
 mod test {

@@ -2,7 +2,7 @@ use core::slice;
 use std::fmt::Debug;
 use std::vec;
 
-use super::unsafe_ops::*;
+use crate::util::unsafe_ops::*;
 use super::*;
 
 /// A list of [`Tag`]s of a specific type. It represents the contents of a list tag ([`Tag::List`]).
