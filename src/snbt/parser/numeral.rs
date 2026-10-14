@@ -484,53 +484,45 @@ mod test {
         };
     }
 
-    st!(CFG | test_long_1, "0l", Some(Tag::Long(0)));
-    st!(CFG | test_long_2, "412l", Some(Tag::Long(412)));
-    st!(CFG | test_long_3, "+412l", Some(Tag::Long(412)));
-    st!(CFG | test_long_4, "-412l", Some(Tag::Long(-412)));
+    st!(CFG | long_1, "0l", Some(Tag::Long(0)));
+    st!(CFG | long_2, "412l", Some(Tag::Long(412)));
+    st!(CFG | long_3, "+412l", Some(Tag::Long(412)));
+    st!(CFG | long_4, "-412l", Some(Tag::Long(-412)));
 
-    st!(CFG | test_int_1, "0", Some(Tag::Int(0)));
-    st!(CFG | test_int_2, "412", Some(Tag::Int(412)));
-    st!(CFG | test_int_3, "+412", Some(Tag::Int(412)));
-    st!(CFG | test_int_4, "-412", Some(Tag::Int(-412)));
+    st!(CFG | int_1, "0", Some(Tag::Int(0)));
+    st!(CFG | int_2, "412", Some(Tag::Int(412)));
+    st!(CFG | int_3, "+412", Some(Tag::Int(412)));
+    st!(CFG | int_4, "-412", Some(Tag::Int(-412)));
 
-    st!(CFG | test_short_1, "0s", Some(Tag::Short(0)));
-    st!(CFG | test_short_2, "412s", Some(Tag::Short(412)));
-    st!(CFG | test_short_3, "+412s", Some(Tag::Short(412)));
-    st!(CFG | test_short_4, "-412s", Some(Tag::Short(-412)));
+    st!(CFG | short_1, "0s", Some(Tag::Short(0)));
+    st!(CFG | short_2, "412s", Some(Tag::Short(412)));
+    st!(CFG | short_3, "+412s", Some(Tag::Short(412)));
+    st!(CFG | short_4, "-412s", Some(Tag::Short(-412)));
 
-    st!(CFG | test_byte_1, "0b", Some(Tag::Byte(0)));
-    st!(CFG | test_byte_2, "18b", Some(Tag::Byte(18)));
-    st!(CFG | test_byte_3, "+18b", Some(Tag::Byte(18)));
-    st!(CFG | test_byte_4, "-18b", Some(Tag::Byte(-18)));
+    st!(CFG | byte_1, "0b", Some(Tag::Byte(0)));
+    st!(CFG | byte_2, "18b", Some(Tag::Byte(18)));
+    st!(CFG | byte_3, "+18b", Some(Tag::Byte(18)));
+    st!(CFG | byte_4, "-18b", Some(Tag::Byte(-18)));
 
-    st!(CFG | test_byte_too_big, "128b", None);
-    st!(CFG | test_short_too_big, "32768s", None);
-    st!(CFG | test_int_too_big, "2147483648i", None);
-    st!(CFG | test_long_too_big, "9223372036854775808l", None);
+    st!(CFG | byte_too_big, "128b", None);
+    st!(CFG | short_too_big, "32768s", None);
+    st!(CFG | int_too_big, "2147483648i", None);
+    st!(CFG | long_too_big, "9223372036854775808l", None);
 
-    st!(CFG | test_byte_too_small, "-129b", None);
-    st!(CFG | test_short_too_small, "-32769s", None);
-    st!(CFG | test_int_too_small, "-2147483649i", None);
-    st!(CFG | test_long_too_small, "-9223372036854775809l", None);
+    st!(CFG | byte_too_small, "-129b", None);
+    st!(CFG | short_too_small, "-32769s", None);
+    st!(CFG | int_too_small, "-2147483649i", None);
+    st!(CFG | long_too_small, "-9223372036854775809l", None);
 
-    st!(CFG | test_byte_max, "127b", Some(Tag::Byte(127)));
-    st!(CFG | test_short_max, "32767s", Some(Tag::Short(32767)));
-    st!(CFG | test_int_max, "2147483647i", Some(Tag::Int(2147483647)));
-    st!(
-        CFG | test_long_max,
-        "9223372036854775807l",
-        Some(Tag::Long(9223372036854775807))
-    );
+    st!(CFG | byte_max, "127b", Some(Tag::Byte(127)));
+    st!(CFG | short_max, "32767s", Some(Tag::Short(32767)));
+    st!(CFG | int_max, "2147483647i", Some(Tag::Int(2147483647)));
+    st!(CFG | long_max, "9223372036854775807l", Some(Tag::Long(9223372036854775807)));
 
-    st!(CFG | test_byte_min, "-128b", Some(Tag::Byte(-128)));
-    st!(CFG | test_short_min, "-32768s", Some(Tag::Short(-32768)));
-    st!(CFG | test_int_min, "-2147483648i", Some(Tag::Int(-2147483648)));
-    st!(
-        CFG | test_long_min,
-        "-9223372036854775808l",
-        Some(Tag::Long(-9223372036854775808))
-    );
+    st!(CFG | byte_min, "-128b", Some(Tag::Byte(-128)));
+    st!(CFG | short_min, "-32768s", Some(Tag::Short(-32768)));
+    st!(CFG | int_min, "-2147483648i", Some(Tag::Int(-2147483648)));
+    st!(CFG | long_min, "-9223372036854775808l", Some(Tag::Long(-9223372036854775808)));
 
     st!(CFG | float_z, "0f", Some(Tag::Float(0.0)));
     st!(CFG | float_df, "3.14f", Some(Tag::Float(3.14)));
@@ -553,9 +545,5 @@ mod test {
     st!(CFG | double_fe, ".14e21", Some(Tag::Double(0.14e21)));
 
     st!(CFG | double_too_big, "79769313486231571E+308", None);
-    st!(
-        CFG | double_max,
-        "1.7976931348623157E+308",
-        Some(Tag::Double(1.7976931348623157E+308))
-    );
+    st!(CFG | double_max, "1.7976931348623157E+308", Some(Tag::Double(1.7976931348623157E+308)));
 }

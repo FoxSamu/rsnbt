@@ -5,6 +5,10 @@ use std::io::{self, Write};
 
 use rsnbt::region::RegionFile;
 
+
+// TODO RegionFile needs more testing
+//  currently we only test reading chunks
+
 #[test]
 fn test_region() -> io::Result<()> {
     // Unpacks chunk 6,4 from the region file at data/region/r.0.0.mca
