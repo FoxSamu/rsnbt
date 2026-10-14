@@ -1,6 +1,5 @@
 use std::fs::File;
 use std::io;
-use std::io::Cursor;
 use std::io::Error;
 use std::io::ErrorKind;
 use std::io::Read;
@@ -9,12 +8,18 @@ use std::io::SeekFrom;
 use std::io::Write;
 use std::path::Path;
 
-use crate::io::Decompression;
-use crate::io::NbtInputConfig;
-use crate::io::decode;
-use crate::region::bit_array::BitArray;
-use crate::tag::Tag;
+use super::bit_array::BitArray;
 use crate::util::rw;
+
+#[cfg(feature = "io")]
+use {
+    std::io::Cursor,
+
+    crate::tag::Tag,
+    crate::io::Decompression,
+    crate::io::NbtInputConfig,
+    crate::io::decode,
+};
 
 pub use super::sector_table::*;
 
@@ -128,13 +133,17 @@ impl ChunkHeader {
         &self.compression
     }
 
+    #[cfg(feature = "io")]
     pub fn nbt_decompression(&self) -> Option<Decompression> {
         match &self.compression {
             ChunkCompressionMode::GZip => Some(Decompression::GZip),
             ChunkCompressionMode::ZLib => Some(Decompression::ZLib),
             ChunkCompressionMode::Raw => Some(Decompression::Uncompressed),
+
+            #[cfg(feature = "lz4b")]
             ChunkCompressionMode::LZ4Block => Some(Decompression::LZ4Block),
-            ChunkCompressionMode::Custom(_) => None,
+
+            _ => None,
         }
     }
 }
@@ -162,6 +171,7 @@ impl ChunkBlob {
         &self.padded_data.as_slice()
     }
 
+    #[cfg(feature = "io")]
     pub fn decode_nbt(&self) -> io::Result<Option<(String, Tag)>> {
         let Some(data) = self.data() else {
             return Ok(None);

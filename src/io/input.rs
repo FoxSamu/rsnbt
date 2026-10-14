@@ -20,10 +20,13 @@ pub enum Decompression {
     #[default]
     GZip,
     ZLib,
-    LZ4Frame,
-    LZ4Block,
-    LZ4Raw,
     Deflate,
+
+    LZ4Frame,
+    LZ4Raw,
+
+    #[cfg(feature = "lz4b")]
+    LZ4Block,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]

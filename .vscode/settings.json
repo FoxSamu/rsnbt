@@ -1,0 +1,13 @@
+{
+    // enable all features manually so we can resolve
+    // errors in the feature dependency graph
+    "rust-analyzer.cargo.features": [
+        "io",
+        "region",
+        "lz4b",
+        "snbt",
+        "chunk_db",
+        "pack"
+    ],
+    "rust-analyzer.cargo.noDefaultFeatures": true
+}

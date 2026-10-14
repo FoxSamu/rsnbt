@@ -93,6 +93,8 @@ pub enum Compression {
     LZ4FrameBest,
 
     // TODO LZ4Block and raw LZ4
+    // #[cfg(feature = "lz4b")]
+    // LZ4Block ....
 }
 
 impl Compression {

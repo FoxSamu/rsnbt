@@ -70,6 +70,7 @@ pub fn detect_compression<R>(first_bytes: &[u8; 4]) -> Vec<Decompression> where 
         // LZ4Block format, starts with "LZ4Block" in ASCII
         // Might also be deflate raw data
         // Cannot be a tag since 'L' does not identify a tag type
+        #[cfg(feature = "lz4b")]
         &[b'L', b'Z', b'4', b'B'] => vec![LZ4Block, Deflate],
 
         // Default LZ4 frame format, starts with 04 22 4D 18

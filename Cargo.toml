@@ -1,28 +1,60 @@
 [package]
-name = "rsnbt"
+name    = "rsnbt"
 version = "0.1.0"
 edition = "2024"
+
+
+[features]
+# Tools for basic NBT encoding and decoding, including basic
+# compression formats
+io       = ["dep:lz4", "dep:flate2"]
+
+# Tools for the parsing and serialization of SNBT code, the
+# human readable form of NBT.
+snbt     = ["dep:unicode_names"]
+
+# Tools for the encoding and decoding of LZ4Block streams,
+# an unconventional LZ4 stream container that Minecraft uses.
+lz4b     = ["dep:xxh", "dep:lz4"]
+
+# Tools for reading and modifying Minecraft region files.
+region   = []
+
+# An asynchronous chunk database that uses region files to
+# provide more higher-level access to a world's chunk storage.
+chunk_db = ["region"]
+
+# Tools to enable packing and unpacking packed integer tags,
+# used to store blocks and biomes.
+pack     = ["pack"]
+
+
+# Default profile
+default  = ["io"]
+
+# All profile
+full     = ["io", "lz4b", "region", "chunk_db", "snbt"]
+
+
+
 
 [dependencies]
 
 [dependencies.lz4]
 version = "1.28.1"
+optional = true
 
 [dependencies.flate2]
 version = "1.1.10"
+optional = true
 
 [dependencies.unicode_names]
-package = "unicode_names2"
-version = "4.0.0"
+package  = "unicode_names2"
+version  = "4.0.0"
 optional = true
 
 [dependencies.xxh]
-package = "xxhash-rust"
-version = "0.8.19"
+package  = "xxhash-rust"
+version  = "0.8.19"
 features = ["xxh32"]
 optional = true
-
-[features]
-snbt = ["dep:unicode_names"]
-lz4b = ["dep:xxh"]
-region  = ["lz4b"]

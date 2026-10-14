@@ -1,6 +1,8 @@
 extern crate core;
 
 pub mod tag;
+
+#[cfg(feature = "io")]
 pub mod io;
 
 #[cfg(feature = "snbt")]

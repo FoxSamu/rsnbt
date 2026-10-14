@@ -1,3 +1,5 @@
+#![cfg(feature = "lz4b")]
+
 use std::fs::File;
 use std::io::Cursor;
 use std::io::copy;
