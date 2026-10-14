@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 use std::io;
-use std::io::Error;
 use std::io::Read;
 use std::io::Write;
 

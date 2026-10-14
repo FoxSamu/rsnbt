@@ -273,9 +273,11 @@ impl NbtStats {
             Decompression::Deflate => {
                 stats.measure_tag_input(&mut Reader::<_, DummyStream>::Unseekable(DeflateDecoder::new(reader)), 0, be)?
             },
-            Decompression::Lz4 => {
+            Decompression::LZ4Frame => {
                 stats.measure_tag_input(&mut Reader::<_, DummyStream>::Unseekable(lz4::Decoder::new(reader)?), 0, be)?
             },
+
+            _ => todo!()
         };
 
         Ok(stats)
@@ -298,9 +300,11 @@ impl NbtStats {
             Decompression::Deflate => {
                 stats.measure_tag_input(&mut Reader::<_, DummyStream>::Unseekable(DeflateDecoder::new(reader)), 0, be)?
             },
-            Decompression::Lz4 => {
+            Decompression::LZ4Frame => {
                 stats.measure_tag_input(&mut Reader::<_, DummyStream>::Unseekable(lz4::Decoder::new(reader)?), 0, be)?
             },
+
+            _ => todo!()
         };
 
         Ok(stats)

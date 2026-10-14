@@ -2,10 +2,10 @@
 
 # Roadmap
 - [x] Base NBT tree model -> `rsnbt::tag`
-- [x] NBT serialization -> `rsnbt::io`
+- [x] NBT codec -> `rsnbt::io`
 - [ ] NBT visitors
 - [ ] SNBT serialization -> WIP `rsnbt::snbt`
-- [x] LZ4Block encoding and decoding[^lz4b] -> `rsnbt::lz4b`
+- [x] LZ4Block codec[^lz4b] -> `rsnbt::lz4b`
 - [ ] MCR/MCA region file toolkit -> WIP `rsnbt::region`
 - [ ] Integer packager[^intpack]
 

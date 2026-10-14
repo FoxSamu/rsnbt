@@ -1,6 +1,6 @@
 /target
 /test_data
-/output
+/out
 /.idea
 
 Cargo.lock

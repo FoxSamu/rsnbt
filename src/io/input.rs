@@ -20,7 +20,9 @@ pub enum Decompression {
     #[default]
     GZip,
     ZLib,
-    Lz4,
+    LZ4Frame,
+    LZ4Block,
+    LZ4Raw,
     Deflate,
 }
 
@@ -73,7 +75,7 @@ where
             input.read_root()
         },
 
-        Decompression::Lz4 => {
+        Decompression::LZ4Frame => {
             let mut input = NbtInput {
                 stream: &mut Lz4Decoder::new(stream)?,
                 config,
@@ -81,6 +83,8 @@ where
 
             input.read_root()
         },
+
+        _ => todo!()
     }
 }
 

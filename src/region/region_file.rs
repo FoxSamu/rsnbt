@@ -1,4 +1,5 @@
 use std::io;
+use std::io::Cursor;
 use std::io::Error;
 use std::io::ErrorKind;
 use std::io::Read;
@@ -6,7 +7,11 @@ use std::io::Seek;
 use std::io::SeekFrom;
 use std::io::Write;
 
+use crate::io::Decompression;
+use crate::io::NbtInputConfig;
+use crate::io::decode;
 use crate::region::bit_array::BitArray;
+use crate::tag::Tag;
 use crate::util::rw;
 
 pub use super::sector_table::*;
@@ -120,6 +125,16 @@ impl ChunkHeader {
     pub fn compression(&self) -> &ChunkCompressionMode {
         &self.compression
     }
+
+    pub fn nbt_decompression(&self) -> Option<Decompression> {
+        match &self.compression {
+            ChunkCompressionMode::GZip => Some(Decompression::GZip),
+            ChunkCompressionMode::ZLib => Some(Decompression::ZLib),
+            ChunkCompressionMode::Raw => Some(Decompression::Uncompressed),
+            ChunkCompressionMode::LZ4Block => Some(Decompression::LZ4Block),
+            ChunkCompressionMode::Custom(_) => None,
+        }
+    }
 }
 
 
@@ -143,6 +158,25 @@ impl ChunkBlob {
 
     pub fn padded_data(&self) -> &[u8] {
         &self.padded_data.as_slice()
+    }
+
+    pub fn decode_nbt(&self) -> io::Result<Option<(String, Tag)>> {
+        let Some(data) = self.data() else {
+            return Ok(None);
+        };
+
+        let Some(mode) = self.header.nbt_decompression() else {
+            return Ok(None);
+        };
+        
+        let decode_options = NbtInputConfig {
+            big_endian: true,
+            allow_empty_end_list: true,
+            max_depth: 512,
+            decompression: mode,
+        };
+
+        Ok(Some(decode(Cursor::new(data), &decode_options)?))
     }
 }
 
@@ -241,10 +275,10 @@ impl<F> RegionFile<F> where F : Read + Write + Seek {
         let mode_bits = rw::read_u8(&mut self.file)?;
         
         let mode = match mode_bits & 0x7F {
-            0 => ChunkCompressionMode::GZip,
-            1 => ChunkCompressionMode::ZLib,
-            2 => ChunkCompressionMode::Raw,
-            3 => ChunkCompressionMode::LZ4Block,
+            1 => ChunkCompressionMode::GZip,
+            2 => ChunkCompressionMode::ZLib,
+            3 => ChunkCompressionMode::Raw,
+            4 => ChunkCompressionMode::LZ4Block,
             127 => ChunkCompressionMode::Custom(rw::read_string_be(&mut self.file)?),
             _ => return Err(Error::new(ErrorKind::InvalidData, "unknown compression mode"))
         };
@@ -339,10 +373,10 @@ impl<F> RegionFile<F> where F : Read + Write + Seek {
         rw::write_u32_be(&mut data, len as u32)?;
 
         match &mode {
-            ChunkCompressionMode::GZip => rw::write_u8(&mut data, 0)?,
-            ChunkCompressionMode::ZLib => rw::write_u8(&mut data, 1)?,
-            ChunkCompressionMode::Raw => rw::write_u8(&mut data, 2)?,
-            ChunkCompressionMode::LZ4Block => rw::write_u8(&mut data, 3)?,
+            ChunkCompressionMode::GZip => rw::write_u8(&mut data, 1)?,
+            ChunkCompressionMode::ZLib => rw::write_u8(&mut data, 2)?,
+            ChunkCompressionMode::Raw => rw::write_u8(&mut data, 3)?,
+            ChunkCompressionMode::LZ4Block => rw::write_u8(&mut data, 4)?,
             ChunkCompressionMode::Custom(name) => {
                 rw::write_u8(&mut data, 127)?;
                 rw::write_string_be(&mut data, name)?;

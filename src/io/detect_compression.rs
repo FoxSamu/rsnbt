@@ -64,21 +64,21 @@ pub fn detect_compression<R>(first_bytes: &[u8; 4]) -> Vec<Decompression> where 
         // - Cannot be raw LZ4 since an offset of 8 cannot exist in 1 byte
         // - Cannot be ZLib as 0x1F*256 + 0x8B is not a multiple of 31
         // - Cannot be LZ4 block as 1F != 'L'
-        // - Cannot be LZ4 default as 1F != 04
+        // - Cannot be LZ4 frame as 1F != 04 and 1F != 02
         &[0x1F, 0x8B, 0x08, _] => vec![GZip],
 
         // LZ4Block format, starts with "LZ4Block" in ASCII
         // Might also be deflate raw data
         // Cannot be a tag since 'L' does not identify a tag type
-        &[b'L', b'Z', b'4', b'B'] => vec![Lz4, Deflate],
+        &[b'L', b'Z', b'4', b'B'] => vec![LZ4Block, Deflate],
 
-        // Default LZ4 format, starts with 04 22 4D 18
+        // Default LZ4 frame format, starts with 04 22 4D 18
         // Might also be deflate raw data or an uncompressed Long tag (with an awkwardly long name)
-        &[0x04, 0x22, 0x4D, 0x18] => vec![Lz4, Deflate, Uncompressed],
+        &[0x04, 0x22, 0x4D, 0x18] => vec![LZ4Frame, Deflate, Uncompressed],
 
-        // Legacy LZ4 format, starts with 02 21 4C 18
+        // Legacy LZ4 frame format, starts with 02 21 4C 18
         // Might also be deflate raw data or an uncompressed Short tag (with an awkwardly long name)
-        &[0x02, 0x21, 0x4C, 0x18] => vec![Lz4, Deflate, Uncompressed],
+        &[0x02, 0x21, 0x4C, 0x18] => vec![LZ4Frame, Deflate, Uncompressed],
         
         &[x, y, z, w] => {
             // We are out of magic numbers here, we need a more heuristic approach
@@ -222,7 +222,7 @@ pub fn detect_compression<R>(first_bytes: &[u8; 4]) -> Vec<Decompression> where 
             let mut scoreboard = vec![
                 (Uncompressed, uncompressed),
                 (Deflate, deflate),
-                (Lz4, lz4),
+                (LZ4Raw, lz4),
                 (ZLib, zlib)
             ];
 
@@ -232,14 +232,6 @@ pub fn detect_compression<R>(first_bytes: &[u8; 4]) -> Vec<Decompression> where 
             scoreboard.into_iter().map(|v| v.0).collect()
         }
     }
-}
-
-fn maybe_include_uncompressed(mut vec: Vec<Decompression>, first_byte: u8) -> Vec<Decompression> {
-    if first_byte != 0 && first_byte <= TagId::MAX {
-        vec.push(Decompression::Uncompressed);
-    }
-
-    vec
 }
 
 fn zlib_checksum(mut x: u8, mut y: u8) -> bool {

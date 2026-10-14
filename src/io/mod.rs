@@ -6,3 +6,4 @@ mod detect_compression;
 pub use input::*;
 pub use output::*;
 pub use stats::*;
+pub use detect_compression::*;

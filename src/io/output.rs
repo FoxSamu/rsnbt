@@ -81,16 +81,18 @@ pub enum Compression {
     DeflateBest,
 
     /// Use LZ4 but do not compress
-    Lz4None,
+    LZ4FrameNone,
 
     /// Use LZ4 with fast but less efficient compression
-    Lz4Fast,
+    LZ4FrameFast,
 
     /// Use LZ4 with medium compression with medium efficiency
-    Lz4Mid,
+    LZ4FrameMid,
 
     /// Use LZ4 with slow but most efficient compression
-    Lz4Best,
+    LZ4FrameBest,
+
+    // TODO LZ4Block and raw LZ4
 }
 
 impl Compression {
@@ -126,10 +128,10 @@ impl Compression {
 
     fn lz4_level(&self) -> Option<u32> {
         match self {
-            Compression::Lz4None => Some(0),
-            Compression::Lz4Fast => Some(1),
-            Compression::Lz4Mid => Some(5),
-            Compression::Lz4Best => Some(9),
+            Compression::LZ4FrameNone => Some(0),
+            Compression::LZ4FrameFast => Some(1),
+            Compression::LZ4FrameMid => Some(5),
+            Compression::LZ4FrameBest => Some(9),
             _ => None,
         }
     }
