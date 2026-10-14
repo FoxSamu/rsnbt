@@ -22,6 +22,7 @@ _Minecraft: Java Edition_ files.
 - [ ] MCR/MCA region file toolkit -> WIP `rsnbt::region`
 - [ ] Concurrent chunk database
 - [ ] Packing integers[^intpack]
+- [ ] Testing and docs
 - [ ] Release on [crates.io](https://crates.io/)
 
 ## Low priority
