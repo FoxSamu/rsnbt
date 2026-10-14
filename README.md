@@ -6,7 +6,7 @@
 - [ ] NBT visitors
 - [ ] SNBT serialization -> WIP `rsnbt::snbt`
 - [x] LZ4Block encoding and decoding[^lz4b] -> `rsnbt::lz4b`
-- [ ] MCA toolkit
+- [ ] MCR/MCA region file toolkit -> WIP `rsnbt::region`
 - [ ] Integer packager[^intpack]
 
 [^lz4b]: Minecraft uses the [lz4-java](https://github.com/yawkat/lz4-java/) library to handle LZ4 compression. This library comes with a non-conventional container format, LZ4Block, that Minecraft uses for chunk storage somtimes. This module provides the tools to decode and encode that format.
