@@ -14,6 +14,9 @@ pub mod lz4b;
 #[cfg(feature = "region")]
 pub mod region;
 
+#[cfg(feature = "bitpack")]
+pub mod bitpack;
+
 #[macro_use]
 pub(crate) mod util;
 

@@ -26,7 +26,7 @@ chunk_db = ["region"]
 
 # Tools to enable packing and unpacking packed integer tags,
 # used to store blocks and biomes.
-pack     = ["pack"]
+bitpack  = []
 
 
 # Default profile
