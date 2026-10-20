@@ -1,11 +1,11 @@
-pub mod ring_buf;
+pub(crate) mod ring_buf;
 
 #[cfg(any(
     feature = "io",
     feature = "region",
     feature = "lz4b",
 ))]
-pub mod rw;
+pub(crate) mod rw;
 
 #[macro_use]
-pub mod unsafe_ops;
+pub(crate) mod unsafe_ops;

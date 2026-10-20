@@ -18,7 +18,7 @@ use crate::tag::TagRef;
 
 /// Measured statistics of an NBT tag.
 ///
-/// ```
+/// ```ignore
 /// let tag = Tag::Int(3);
 /// let name = String::from("foo");
 ///

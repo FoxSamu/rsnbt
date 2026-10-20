@@ -1,4 +1,5 @@
-/// A trait for iterators that are "biterable" (bit(wise) + iterable).
+/// A trait for iterators that are "biterable" (portmanteau of bit and iterable).
+/// This trait is implemented on iterators that output [`u64`] or [`i64`] values.
 /// 
 /// Biteration is a streaming alternatives to [`BitStorage`][super::BitStorage].
 /// This is advantageous if you need to decode bit storages and then write the

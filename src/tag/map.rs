@@ -6,6 +6,14 @@ use std::ops::Deref;
 use std::ptr::*;
 
 use super::*;
+use super::cast::*;
+
+
+// ====================================================================================================
+//
+//   TAGMAP DATA STRUCTURE
+//
+// ====================================================================================================
 
 #[derive(Debug, Clone, Copy)]
 struct KeyRef {
@@ -90,52 +98,31 @@ enum InsertMode {
 /// # Order preservation
 /// Where [`TagMap`]s share a lot of similarities with `HashMap<String, Tag>` values, a key difference is
 /// that a [`TagMap`] preserves an iteration order. By default, this order is the order in which elements
-/// were inserted:
-/// ```
-/// use crate::tag::*;
-///
-/// let mut map = TagMap::new();
-/// map.insert(String::from("foo"), 3);
-/// map.insert(String::from("bar"), 5);
-/// map.insert(String::from("baz"), 7);
-/// map.insert(String::from("gus"), 11);
-///
-/// // Iterator now returns elements in the inserted order
-/// let mut iter = map.into_iter();
-/// assert_eq!(Some((String::from("foo"), 3)), iter.next());
-/// assert_eq!(Some((String::from("bar"), 5)), iter.next());
-/// assert_eq!(Some((String::from("baz"), 7)), iter.next());
-/// assert_eq!(Some((String::from("gus"), 11)), iter.next());
-/// ```
-///
-/// Different insertion methods have different but deterministic effects on iteration order.
+/// were inserted. Different insertion methods have different but deterministic effects on iteration order.
 ///
 /// Note that [`TagMap`]s are equal under [`PartialEq`] regardless of the iteration order. This means that
 /// creating one map with `foo: 3, bar: 4` and another map with `bar: 4, foo: 3` will result in two maps
 /// that are logically equal.
 ///
-/// # Instantiation
-/// It is possible to create [`TagMap`]s using a special macro, [`tag_map`]. This macro accepts a JSON-like syntax:
-/// ```no_run
-/// use crate::tag::*;
-///
-/// let non_const_key = "gus";
-/// let non_const_value = true;
-///
-/// let map = tag_map! {
-///     "foo": 3,
-///     "bar": "hello world",
-///
-///     // Values can be any expression
-///     "baz": non_const_value,
-///
-///     // To use expressions as keys, wrap them in
-///     // square brackets
-///     [non_const_key]: false
-/// };
+/// # Examples
 /// ```
-///
-/// The iteration order of maps created by this macro is the order in which keys were defined in the macro body.
+/// use rsnbt::tag::{Tag, TagMap, tag_map};
+/// 
+/// // the tag_map macro accepts a JSON-like syntax
+/// let map = tag_map! { "foo": 1, "bar": "gus" };
+/// 
+/// assert_eq!(Some(&Tag::int(1)), map.get("foo"));
+/// assert_eq!(Some(&Tag::string("gus")), map.get("bar"));
+/// 
+/// // this key is not part of the map
+/// assert_eq!(None, map.get("baz"));
+/// 
+/// // iteration order is preserved
+/// let mut iter = map.keys();
+/// assert_eq!(Some(&"foo".into()), iter.next());
+/// assert_eq!(Some(&"bar".into()), iter.next());
+/// assert_eq!(None, iter.next());
+/// ```
 pub struct TagMap {
     map: HashMap<KeyRef, Box<Node>>,
     head: *mut Node,
@@ -315,6 +302,10 @@ impl TagMap {
         self.map.get(key).map(|v| v.as_ref())
     }
 
+    fn get_node_mut(&mut self, key: &KeyRef) -> Option<&mut Node> {
+        self.map.get_mut(key).map(|v| v.as_mut())
+    }
+
     /// Insert a [`Tag`] under the given key into this [`TagMap`]. If there was a tag previously
     /// stored with the same key, then that tag is moved out and returned.
     ///
@@ -323,11 +314,8 @@ impl TagMap {
     /// if a key already existed in this map. That is, inserting `foo` and then `bar` into an empty map
     /// creates an iteration order of `foo` and then `bar`, but then inserting a new value for `foo`
     /// will keep the order `foo` then `bar`.
-    pub fn insert<T>(&mut self, key: String, value: T) -> Option<Tag>
-    where
-        T: Into<Tag>,
-    {
-        let node = Node::new(key, value.into());
+    pub fn insert(&mut self, key: impl Into<String>, value: impl Into<Tag>) -> Option<Tag> {
+        let node = Node::new(key.into(), value.into());
         let existing = self.put_node(node, InsertMode::KeepPositionOtherwiseEnd)?;
         Some(existing.value)
     }
@@ -340,11 +328,8 @@ impl TagMap {
     /// end. That is, reinserting `foo` and then `bar` into an empty map creates an iteration order
     /// of `foo` and then `bar`, and inserting a new value for `foo` will change the order into `bar`
     /// then `foo`.
-    pub fn reinsert<T>(&mut self, key: String, value: T) -> Option<Tag>
-    where
-        T: Into<Tag>,
-    {
-        let node = Node::new(key, value.into());
+    pub fn reinsert(&mut self, key: impl Into<String>, value: impl Into<Tag>) -> Option<Tag> {
+        let node = Node::new(key.into(), value.into());
         let existing = self.put_node(node, InsertMode::End)?;
         Some(existing.value)
     }
@@ -357,11 +342,8 @@ impl TagMap {
     /// if a key already existed in this map. That is, inserting `foo` and then `bar` into an empty map
     /// creates an iteration order of `bar` and then `foo`, but then inserting a new value for `foo`
     /// will keep the order `bar` then `foo`.
-    pub fn insert_head<T>(&mut self, key: String, value: T) -> Option<Tag>
-    where
-        T: Into<Tag>,
-    {
-        let node = Node::new(key, value.into());
+    pub fn insert_head(&mut self, key: impl Into<String>, value: impl Into<Tag>) -> Option<Tag> {
+        let node = Node::new(key.into(), value.into());
         let existing = self.put_node(node, InsertMode::KeepPositionOtherwiseStart)?;
         Some(existing.value)
     }
@@ -374,17 +356,14 @@ impl TagMap {
     /// start. That is, reinserting `foo` and then `bar` into an empty map creates an iteration order
     /// of `bar` and then `foo`, and inserting a new value for `foo` will change the order into `foo`
     /// then `bar`.
-    pub fn reinsert_head<T>(&mut self, key: String, value: T) -> Option<Tag>
-    where
-        T: Into<Tag>,
-    {
-        let node = Node::new(key, value.into());
+    pub fn reinsert_head(&mut self, key: impl Into<String>, value: impl Into<Tag>) -> Option<Tag> {
+        let node = Node::new(key.into(), value.into());
         let existing = self.put_node(node, InsertMode::Start)?;
         Some(existing.value)
     }
 
-    /// Removes a value from this [`TagMap`] given its key, and returns it. If no value existed with given key,
-    /// then this method returns [`None`].
+    /// Removes a value from this [`TagMap`] given its key, and returns it. If no value exists with given key,
+    /// then this method does nothing and returns [`None`].
     ///
     /// # Order
     /// This method preserves the iteration order of the remaining elements. That is, in a map with iteration order
@@ -393,22 +372,80 @@ impl TagMap {
     /// Note that the position of a key in the iteration order is forgotten once that key is removed. This means that
     /// reinserting that key later will always result in that key appearing at the start or end of the iteration order
     /// (depending on the method used for insertion), even if it wasn't there before.
-    pub fn remove(&mut self, key: &String) -> Option<Tag> {
-        let node = self.remove_node(&KeyRef::tmp(key))?;
+    pub fn remove<T: ?Sized>(&mut self, key: &T) -> Option<Tag>
+    where
+        for<'a> &'a T: Into<String>,
+    {
+        let node = self.remove_node(&KeyRef::tmp(&key.into()))?;
         Some(node.value)
     }
 
-    /// Returns a reference to a value in this [`TagMap`] given its key. If no value existed with the given key,
+    /// Returns a reference to a value in this [`TagMap`] given its key. If no value exists with the given key,
     /// then this method returns [`None`].
-    pub fn get(&self, key: &String) -> Option<&Tag> {
-        let node = self.get_node(&KeyRef::tmp(key))?;
+    pub fn get<T: ?Sized>(&self, key: &T) -> Option<&Tag>
+    where
+        for<'a> &'a T: Into<String>,
+    {
+        let node = self.get_node(&KeyRef::tmp(&key.into()))?;
         Some(&node.value)
     }
 
+    /// Returns a mutable reference to a value in this [`TagMap`] given its key. If no value exists with the given key,
+    /// then this method returns [`None`]. Note that mutating the tag value through the given reference will not cause
+    /// the iteration order to change.
+    pub fn get_mut<T: ?Sized>(&mut self, key: &T) -> Option<&mut Tag>
+    where
+        for<'a> &'a T: Into<String>,
+    {
+        let node = self.get_node_mut(&KeyRef::tmp(&key.into()))?;
+        Some(&mut node.value)
+    }
+
     /// Returns a reference to a value in this [`TagMap`] given its key and wraps it as a [`TagRef`]. If no value
-    /// existed with the given key, then this method returns [`None`].
-    pub fn get_ref(&self, key: &String) -> Option<TagRef<'_>> {
+    /// exists with the given key, then this method returns [`None`].
+    pub fn get_ref<T: ?Sized>(&self, key: &T) -> Option<TagRef<'_>>
+    where
+        for<'a> &'a T: Into<String>,
+    {
         Some(self.get(key)?.into())
+    }
+
+    /// Returns a mutable reference to a value in this [`TagMap`] given its key and wraps it as a [`TagRefMut`]. If no value
+    /// exists with the given key, then this method returns [`None`].
+    pub fn get_ref_mut<T: ?Sized>(&mut self, key: &T) -> Option<TagRefMut<'_>>
+    where
+        for<'a> &'a T: Into<String>,
+    {
+        Some(self.get_mut(key)?.into())
+    }
+
+    /// Returns the [`TagId`] of an element in this map given its key. If no value exists with the given
+    /// key, this method returns [`None`].
+    pub fn get_id<T: ?Sized>(&self, key: &T) -> Option<TagId>
+    where
+        for<'a> &'a T: Into<String>,
+    {
+        let node = self.get_node(&KeyRef::tmp(&key.into()))?;
+        Some(node.value.id())
+    }
+
+    /// Checks if the given key refers to an element in this map.
+    pub fn contains_key<T: ?Sized>(&self, key: &T) -> bool
+    where
+        for<'a> &'a T: Into<String>,
+    {
+        self.get_node(&KeyRef::tmp(&key.into())).is_some()
+    }
+
+    /// Checks if the given key refers to an element with given ID in this map.
+    pub fn is<T: ?Sized>(&self, key: &T, id: TagId) -> bool
+    where
+        for<'a> &'a T: Into<String>,
+    {
+        match self.get_node(&KeyRef::tmp(&key.into())) {
+            Some(n) => n.value.id() == id,
+            None => false,
+        }
     }
 
     /// Removes all elements from this [`TagMap`], discarding all of it.
@@ -474,6 +511,12 @@ impl TagMap {
             _owner: self,
         }
     }
+
+
+    // TODO
+    // - Sorting
+    // - Reordering
+    // - Reversing
 }
 
 impl Debug for TagMap {
@@ -518,6 +561,18 @@ impl PartialEq for TagMap {
         self.map == other.map
     }
 }
+
+impl<S, T> From<HashMap<S, T>> for TagMap where S : Into<String>, T : Into<Tag> {
+    fn from(value: HashMap<S, T>) -> Self {
+        let mut map = Self::new();
+        for (k, v) in value {
+            map.insert(k, v);
+        }
+        map
+    }
+}
+
+
 
 pub struct Values<'a> {
     next: *const Node,
@@ -688,7 +743,7 @@ macro_rules! tag_map {
 
             let mut map = TagMap::new();
             $(
-                map.insert(String::from($($key)? $($key_expr)?), $value);
+                map.insert($($key)? $($key_expr)?, $value);
             )+
             map
         }
@@ -696,6 +751,49 @@ macro_rules! tag_map {
 }
 
 pub use tag_map;
+
+
+
+
+// ====================================================================================================
+//
+//   TAG INTEGRATION
+//
+// ====================================================================================================
+
+impl Tag {
+    pub fn compound<T>(v: T) -> Tag
+    where
+        T: Into<TagMap>,
+    {
+        Tag::Compound(v.into())
+    }
+
+    pub fn into_tag_map(self) -> Result<TagMap, TagCastError<Self>> {
+        if let Self::Compound(v) = self {
+            Ok(v)
+        } else {
+            Err(TagCastError::new(TagId::Compound, self.id(), self))
+        }
+    }
+}
+
+impl From<TagMap> for Tag {
+    fn from(value: TagMap) -> Self {
+        Self::Compound(value)
+    }
+}
+
+
+
+
+
+
+// ====================================================================================================
+//
+//   TESTING
+//
+// ====================================================================================================
 
 #[cfg(test)]
 mod test {
@@ -711,58 +809,59 @@ mod test {
         };
 
         let mut keys = map.into_iter();
-        assert_eq!(Some((String::from("foo"), Tag::from(3))), keys.next());
-        assert_eq!(Some((String::from("bar"), Tag::from(4))), keys.next());
-        assert_eq!(Some((String::from("baz"), Tag::from(5))), keys.next());
-        assert_eq!(Some((String::from("gus"), Tag::from(6))), keys.next());
+
+        assert_eq!(Some(("foo".into(), Tag::int(3))), keys.next());
+        assert_eq!(Some(("bar".into(), Tag::int(4))), keys.next());
+        assert_eq!(Some(("baz".into(), Tag::int(5))), keys.next());
+        assert_eq!(Some(("gus".into(), Tag::int(6))), keys.next());
         assert_eq!(None, keys.next());
     }
 
     #[test]
     fn test_basic_inserts_order() {
         let mut map = TagMap::new();
-        map.insert(String::from("foo"), Tag::Byte(3));
-        map.insert(String::from("bar"), Tag::Byte(15));
-        map.insert(String::from("baz"), Tag::Int(34123));
-        map.insert(String::from("gus"), Tag::Int(99128));
+        map.insert("foo", Tag::Byte(3));
+        map.insert("bar", Tag::Byte(15));
+        map.insert("baz", Tag::Int(34123));
+        map.insert("gus", Tag::Int(99128));
 
         let mut keys = map.into_keys();
-        assert_eq!(Some(String::from("foo")), keys.next());
-        assert_eq!(Some(String::from("bar")), keys.next());
-        assert_eq!(Some(String::from("baz")), keys.next());
-        assert_eq!(Some(String::from("gus")), keys.next());
+        assert_eq!(Some("foo".into()), keys.next());
+        assert_eq!(Some("bar".into()), keys.next());
+        assert_eq!(Some("baz".into()), keys.next());
+        assert_eq!(Some("gus".into()), keys.next());
         assert_eq!(None, keys.next());
     }
 
     #[test]
     fn test_insert_overwrite_order() {
         let mut map = TagMap::new();
-        map.insert(String::from("foo"), Tag::Byte(3));
-        map.insert(String::from("bar"), Tag::Byte(15));
-        map.insert(String::from("baz"), Tag::Int(34123));
-        map.insert(String::from("bar"), Tag::Int(99128));
+        map.insert("foo", Tag::Byte(3));
+        map.insert("bar", Tag::Byte(15));
+        map.insert("baz", Tag::Int(34123));
+        map.insert("bar", Tag::Int(99128));
 
         let mut keys = map.into_keys();
-        assert_eq!(Some(String::from("foo")), keys.next());
-        assert_eq!(Some(String::from("bar")), keys.next());
-        assert_eq!(Some(String::from("baz")), keys.next());
+        assert_eq!(Some("foo".into()), keys.next());
+        assert_eq!(Some("bar".into()), keys.next());
+        assert_eq!(Some("baz".into()), keys.next());
         assert_eq!(None, keys.next());
     }
 
     #[test]
     fn test_remove_then_insert_order() {
         let mut map = TagMap::new();
-        map.insert(String::from("foo"), Tag::Byte(3));
-        map.insert(String::from("bar"), Tag::Byte(15));
-        map.insert(String::from("baz"), Tag::Int(34123));
+        map.insert("foo", Tag::Byte(3));
+        map.insert("bar", Tag::Byte(15));
+        map.insert("baz", Tag::Int(34123));
 
-        map.remove(&String::from("bar"));
-        map.insert(String::from("bar"), Tag::Int(99128));
+        map.remove("bar");
+        map.insert("bar", Tag::Int(99128));
 
         let mut keys = map.into_keys();
-        assert_eq!(Some(String::from("foo")), keys.next());
-        assert_eq!(Some(String::from("baz")), keys.next());
-        assert_eq!(Some(String::from("bar")), keys.next());
+        assert_eq!(Some("foo".into()), keys.next());
+        assert_eq!(Some("baz".into()), keys.next());
+        assert_eq!(Some("bar".into()), keys.next());
         assert_eq!(None, keys.next());
     }
 }

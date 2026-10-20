@@ -1,56 +1,350 @@
-use crate::util::unsafe_ops::*;
+use std::fmt::Debug;
+
 use super::*;
-use crate::tag::Tag::Byte;
 
 /// An NBT tag. The NBT (Named Binary Tag) format structures data similarly to JSON, but is inherently meant
 /// for binary serialization rather than something human-readable. However, NBT comes with a
-/// human-readable form, SNBT (String Named Binary Tag).
+/// human-readable form, SNBT (String Named Binary Tag), which is much like JSON and can be parsed or serialized
+/// using the `snbt` module.
+/// 
+/// # NBT basics
 ///
 /// A tag is one of 12 types:
-/// - [Tag::Byte]: An 8-bit integer, often interpreted as signed or as a boolean.
-/// - [Tag::Short]: A 16-bit integer, often interpreted as signed.
-/// - [Tag::Int]: A 32-bit integer, often interpreted as signed.
-/// - [Tag::Long]: A 64-bit integer, often interpreted as signed.
-/// - [Tag::Float]: A 32-bit floating point value.
-/// - [Tag::Double]: A 64-bit floating point value.
-/// - [Tag::String]: A UTF-8 string.
-/// - [Tag::ByteArray]: An array of 8-bit integers, often interpreted as some raw binary data.
-/// - [Tag::IntArray]: An array of 32-bit integers, often interpreted as coordinates or UUIDs.
-/// - [Tag::LongArray]: An array of 64-bit integers, often interpreted as tightly packed binary data.
-/// - [Tag::List]: A list tags of the same type, without a name.
-/// - [Tag::Compound]: A collection of named tags, almost always interpreted as a mapping from names to tags.
+/// - [`Tag::Byte`]: An 8-bit integer, often interpreted as signed or as a boolean.
+/// - [`Tag::Short`]: A 16-bit integer, often interpreted as signed.
+/// - [`Tag::Int`]: A 32-bit integer, often interpreted as signed.
+/// - [`Tag::Long`]: A 64-bit integer, often interpreted as signed.
+/// - [`Tag::Float`]: A 32-bit floating point value.
+/// - [`Tag::Double`]: A 64-bit floating point value.
+/// - [`Tag::String`]: A UTF-8 string.
+/// - [`Tag::ByteArray`]: An array of 8-bit integers, often interpreted as some raw binary data.
+/// - [`Tag::IntArray`]: An array of 32-bit integers, often interpreted as coordinates or UUIDs.
+/// - [`Tag::LongArray`]: An array of 64-bit integers, often interpreted as tightly packed binary data.
+/// - [`Tag::List`]: A list tags payloads of the same type.
+/// - [`Tag::Compound`]: A collection of named tags, almost always interpreted as a mapping from names to tags.
+/// 
+/// Each tag has a corresponding binary representation, consisting of 3 main parts:
+/// - an 8-bit tag ID;
+/// - a UTF-8 encoded name of at most 65535 bytes, preceded by two bytes that encode the length;
+/// - a payload of a type-dependent length.
 ///
-/// Within binary representation, all tags have names, unless they appear inside a `List` tag. However,
-/// the name is omitted in [Tag] and instead tags are associated names using [TagMap].
+/// These data are tightly packed to form the full tag encoding:
+/// ```text
+/// Byte: | 0  | 1 | 2 | 3  ..  2+L | 3+L .... |
+/// Data: | ID | L     | Name bytes | Payload  |
+/// ```
+/// 
+/// The tag ID is a unique ID identifying the type of the tag's payload (byte, string, compound, etc.).
+/// See the documentation of [`TagId`] for more information. The tag ID is never `0`, this ID is reserved
+/// to mark the end of a [compound tag][Tag::Compound].
 ///
-/// NBT was designed for and is used extensively by Minecraft. For more information about
-/// NBT, see [https://minecraft.wiki/w/NBT_format].
+/// The tag name starts with a 16-bit unsigned integer (2 bytes), followed by that
+/// amount of UTF-8 bytes. It must be valid UTF-8. It is the same format as the payload of
+/// a [string tag][Tag::String].
+/// 
+/// The exact format of the payload depends on the tag type:
+/// - [`Tag::Byte`]: a 1-byte integer;
+/// - [`Tag::Short`]: a 2-byte integer;
+/// - [`Tag::Int`]: a 4-byte integer;
+/// - [`Tag::Long`]: an 8-byte integer;
+/// - [`Tag::Float`]: a 4-byte IEEE 754 compatible float;
+/// - [`Tag::Double`]: an 8-byte IEEE 754 compatible float;
+/// - [`Tag::String`]: a 2-byte unsigned length followed by that amount of UTF-8 bytes (same as the tag name);
+/// - [`Tag::ByteArray`]: a 4-byte _signed_ length followed by that amount of byte values;
+/// - [`Tag::IntArray`]: a 4-byte _signed_ length followed by that amount of int values;
+/// - [`Tag::LongArray`]: a 4-byte _signed_ length followed by that amount of long values;
+/// - [`Tag::List`]: a tag ID, then a 4-byte _signed_ length, then that amount of (unnamed and untyped) payloads
+///   of the respective type;
+/// - [`Tag::Compound`]: an arbitrary amount of fully encoded tags (type + name + payload), followed by an
+///   end marker (`0`, the value that tag ID's cannot be).
+/// 
+/// See the documentation of the respective tag types for more information about their encoding.
 ///
-/// ## Implementation notes
+/// NBT was designed by Notch for Minecraft, and remains the primary storage format used Minecraft:
+/// Java Edition. Minecraft: Bedrock Edition also uses NBT, but far more conservatively. For more
+/// information about NBT, its history, and its use throughout Minecraft, see
+/// [the Minecraft wiki](https://minecraft.wiki/w/NBT_format).
+/// 
+/// # A note about endian-ness
+/// NBT was originally designed for Minecraft: Java Edition, and traditionally all numeric values, whether those
+/// are numeric payloads, lengths of names/strings or lengths of arrays/lists, are all encoded in **big-endian**.
+/// That is, the first byte of any integer or float value is the 8 most significant bits of the value (in the
+/// case of a float, that is the byte that contains its sign bit). Thus, the int value `0xC0A0B` is stored as
+/// four bytes in the order `00 0C 0A 0B`.
+/// 
+/// However, Minecraft likes to be inconsistent with its formatting of NBT, so in Minecraft: Bedrock Edition,
+/// every numeric value is instead **little-endian**. This means that the first byte of a numeric value is
+/// the 8 least significant bits of the number. Thus, the same value `0xC0A0B` is instead stored as
+/// `0B 0A 0C 00`.
+/// 
+/// The endian-ness is always consistent throughout an NBT blob, primarily because Java Edition always uses
+/// big-endian encoding and Bedrock Edition always uses little-endian encoding. Since Bedrock Edition does not
+/// use NBT as extensively as Java Edition, it is recommended to store NBT in big-endian format unless it is
+/// specifically meant to be decoded by Bedrock Edition.
+/// 
+/// # Implementation Details
+/// While the tag's full encoding inherently includes space for a name, the [`Tag`] enum does not include
+/// names. This is by design. Instead if shipping names with [`Tag`]s, [`Tag`]s are associated to names in
+/// a [`TagMap`], the construct used to represent a [compound tag][Tag::Compound]. The reason for this is that,
+/// other than at the root of an NBT data blob, named tags only appear in compound tags. Since this one root
+/// name is easily tracked in a separate variable, and [`TagMap`] handles the naming of tags in a compound tag,
+/// the [`Tag`] enum does not include names.
+///
+/// Some other notes:
 /// - While primitive tags could easily implement [Copy], because a tag can be more than a primitive, [Copy]
 ///   is not implemented.
 /// - Due to tags being able to contain floats, [Tag] cannot implement [Eq].
 #[derive(Clone, PartialEq, Debug)]
 pub enum Tag {
+    /// A tag storing an 8-bit wide integer, signed or unsigned.
+    /// Byte tags are often used to represent booleans.
+    /// 
+    /// The value used to represent byte tags is [`i8`].
+    /// Its numerical ID is `1` (see [`TagId`]).
+    /// 
+    /// # Payload Layout
+    /// ```text
+    /// Byte: | 1      | 2
+    /// Data: | Value  |
+    /// ```
     Byte(i8),
+
+    /// A tag storing a 16-bit wide integer, signed or unsigned.
+    /// 
+    /// The value used to represent short tags is [`i16`].
+    /// Its numerical ID is `2` (see [`TagId`]).
+    /// 
+    /// # Payload Layout
+    /// ```text
+    /// Byte: | 1   | 2   | 3
+    /// Data: | Value     |
+    /// ```
+    /// 
+    /// The endianness can vary. Minecraft: Java Edition writes
+    /// numbers in big-endian while Minecraft: Bedrock Edition
+    /// writes numbers in little-endian. This can be configured
+    /// when loading or saving NBT tags through the `io` module.
     Short(i16),
+
+    /// A tag storing a 32-bit wide integer, signed or unsigned.
+    /// 
+    /// The value used to represent int tags is [`i32`].
+    /// Its numerical ID is `3` (see [`TagId`]).
+    /// 
+    /// # Payload Layout
+    /// ```text
+    /// Byte: | 1   | 2   | 3   | 4   | 5
+    /// Data: | Value                 |
+    /// ```
+    /// 
+    /// The endianness can vary. Minecraft: Java Edition writes
+    /// numbers in big-endian while Minecraft: Bedrock Edition
+    /// writes numbers in little-endian. This can be configured
+    /// when loading or saving NBT tags through the `io` module.
     Int(i32),
+
+    /// A tag storing a 64-bit wide integer, signed or unsigned.
+    /// 
+    /// The value used to represent long tags is [`i64`].
+    /// Its numerical ID is `4` (see [`TagId`]).
+    /// 
+    /// # Payload Layout
+    /// ```text
+    /// Byte: | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
+    /// Data: | Value                         |
+    /// ```
+    /// 
+    /// The endianness can vary. Minecraft: Java Edition writes
+    /// numbers in big-endian while Minecraft: Bedrock Edition
+    /// writes numbers in little-endian. This can be configured
+    /// when loading or saving NBT tags through the `io` module.
     Long(i64),
+
+    /// A tag storing a 32-bit wide floating point value, as per
+    /// the IEEE 754 standard for floating point values.
+    /// 
+    /// The value used to represent float tags is [`f32`].
+    /// Its numerical ID is `5` (see [`TagId`]).
+    /// 
+    /// # Payload Layout
+    /// ```text
+    /// Byte: | 1   | 2   | 3   | 4   | 5
+    /// Data: | Value                 |
+    /// ```
+    /// 
+    /// The endianness can vary. Minecraft: Java Edition writes
+    /// numbers in big-endian while Minecraft: Bedrock Edition
+    /// writes numbers in little-endian. This can be configured
+    /// when loading or saving NBT tags through the `io` module.
     Float(f32),
+
+    /// A tag storing a 64-bit wide floating point value, as per
+    /// the IEEE 754 standard for floating point values.
+    /// 
+    /// The value used to represent double tags is [`f64`].
+    /// Its numerical ID is `6` (see [`TagId`]).
+    /// 
+    /// # Payload Layout
+    /// ```text
+    /// Byte: | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
+    /// Data: | Value                         |
+    /// ```
+    /// 
+    /// The endianness can vary. Minecraft: Java Edition writes
+    /// numbers in big-endian while Minecraft: Bedrock Edition
+    /// writes numbers in little-endian. This can be configured
+    /// when loading or saving NBT tags through the `io` module.
     Double(f64),
+
+    /// A tag storing an UTF-8 string. In binary, strings consist
+    /// of a 16-bit unsigned length followed by that amount of
+    /// bytes of UTF-8 data. The string cannot be more than
+    /// 65535 bytes long and must be valid UTF-8.
+    /// 
+    /// The value used to represent string tags is [`String`].
+    /// Its numerical ID is `8` (see [`TagId`]).
+    /// 
+    /// # Payload Layout
+    /// ```text
+    /// Byte: | 1   | 2   | 3      | 4      | .. | N+1      | N+2
+    /// Data: | N         | Byte 0 | Byte 1 | .. | Byte N-1 |
+    /// ```
+    /// 
+    /// The endianness of the length can vary. Minecraft: Java
+    /// Edition writes numbers in big-endian while Minecraft:
+    /// Bedrock Edition writes numbers in little-endian. This
+    /// can be configured when loading or saving NBT tags through
+    /// the `io` module.
     String(String),
+
+    /// A tag storing an array of byte payloads. In binary, byte
+    /// arrays consist of a 32-bit **signed** length followed by
+    /// that amount of byte payloads. Fundamentally, that length
+    /// cannot be negative.
+    /// 
+    /// The value used to represent byte array tags is a [`Vec`]
+    /// of [`i8`]s.
+    /// Its numerical ID is `7` (see [`TagId`]).
+    /// 
+    /// # Payload Layout
+    /// ```text
+    /// Byte: | 1 | 2 | 3 | 4 | 5      | 6      | .. | N+3      | N+4
+    /// Data: | N             | Byte 0 | Byte 1 | .. | Byte N-1 |
+    /// ```
+    /// 
+    /// The endianness of the length can vary. Minecraft: Java
+    /// Edition writes numbers in big-endian while Minecraft:
+    /// Bedrock Edition writes numbers in little-endian. This
+    /// can be configured when loading or saving NBT tags through
+    /// the `io` module.
     ByteArray(Vec<i8>),
+
+    /// A tag storing an array of int payloads. In binary, int
+    /// arrays consist of a 32-bit **signed** length followed by
+    /// that amount of int payloads. Fundamentally, that length
+    /// cannot be negative.
+    /// 
+    /// The value used to represent int array tags is a [`Vec`]
+    /// of [`i32`]s.
+    /// Its numerical ID is `11` (see [`TagId`]).
+    /// 
+    /// # Payload Layout
+    /// ```text
+    /// Byte: | 1 | 2 | 3 | 4 | 5 .. 8 | 9 .. 12 | .. | 4N .. 4N+3 | 4N+4
+    /// Data: | N             | Int 0  | Int 1   | .. | Byte N-1   |
+    /// ```
+    /// 
+    /// The endianness of the length and elements can vary but
+    /// is the same across an NBT blob. Minecraft: Java Edition
+    /// writes numbers in big-endian while Minecraft: Bedrock
+    /// Edition writes numbers in little-endian. This can be
+    /// configured when loading or saving NBT tags through
+    /// the `io` module.
     IntArray(Vec<i32>),
+
+    /// A tag storing an array of long payloads. In binary, long
+    /// arrays consist of a 32-bit **signed** length followed by
+    /// that amount of long payloads. Fundamentally, that length
+    /// cannot be negative.
+    /// 
+    /// The value used to represent long array tags is a [`Vec`]
+    /// of [`i64`]s.
+    /// Its numerical ID is `12` (see [`TagId`]).
+    /// 
+    /// # Payload Layout
+    /// ```text
+    /// Byte: | 1 | 2 | 3 | 4 | 5 .. 11 | 12 .. 19 | .. | 8N-4 .. 8N+3 | 8N+4
+    /// Data: | N             | Long 0  | Long 1   | .. | Byte N-1     |
+    /// ```
+    /// 
+    /// The endianness of the length and elements can vary but
+    /// is the same across an NBT blob. Minecraft: Java Edition
+    /// writes numbers in big-endian while Minecraft: Bedrock
+    /// Edition writes numbers in little-endian. This can be
+    /// configured when loading or saving NBT tags through
+    /// the `io` module.
     LongArray(Vec<i64>),
+
+    /// A tag storing an array of payloads of a specific type ID
+    /// specified in the payload. In binary, lists consist of an
+    /// 8-bit element tag ID and 32-bit **signed** length followed
+    /// by that amount of long payloads of the according type.
+    /// Fundamentally, that length cannot be negative and the element
+    /// ID must be a valid tag ID. The element ID may be `0` if the
+    /// list is empty.
+    /// 
+    /// The value used to represent list tags is a [`TagList`].
+    /// Its numerical ID is `9` (see [`TagId`]).
+    /// 
+    /// List tags may be nested with other list tags or compound tags.
+    /// Note that the lists in a list of lists may each have a different
+    /// type of elements.
+    /// 
+    /// # Payload Layout
+    /// ```text
+    /// Byte: | 0  | 1 | 2 | 3 | 4 | 5  ..  X0-1 | X0 .. X1-1 | .. | X(N-1) .. XN-1 | XN
+    /// Data: | ID | N             | Payload 0   | Payload 1  | .. | Payload N-1    |
+    /// ```
+    /// 
+    /// The endianness of the length and elements can vary but
+    /// is the same across an NBT blob. Minecraft: Java Edition
+    /// writes numbers in big-endian while Minecraft: Bedrock
+    /// Edition writes numbers in little-endian. This can be
+    /// configured when loading or saving NBT tags through
+    /// the `io` module.
     List(TagList),
+
+    /// A tag storing a table of fully named tag values. In binary,
+    /// compound tags consist simply of all the tag values packed
+    /// together, followed by an end marker (tag ID `0`). Tags must
+    /// have unique names so they can be identified by name after
+    /// decoding.
+    /// 
+    /// The value used to represent compound tags is a [`TagMap`].
+    /// Its numerical ID is `10` (see [`TagId`]).
+    /// 
+    /// Compound tags may be nested with other compound tags or list tags.
+    /// 
+    /// # Payload Layout
+    /// ```text
+    /// Byte: | 0   | 1 | 2 | 3 .. 2+L0 | 3+L0 .. X0-1 | X0           ..          X1-1 | .. | XN  | XN + 1
+    /// Data: | ID0 | L0    | Name 0    | Payload 0    | ID1 + L1 + Name 1 + Payload 1 | .. | END |
+    /// ```
+    /// 
+    /// The endianness of elements can vary per NBT blob but is the
+    /// same across an NBT blob. Minecraft: Java Edition writes
+    /// numbers in big-endian while Minecraft: Bedrock Edition writes
+    /// numbers in little-endian. This can be configured when loading
+    /// or saving NBT tags through the `io` module.
     Compound(TagMap),
 }
 
 impl Tag {
-    /// Returns the [TagId] of a [Tag].
+    /// Returns the [`TagId`] of a [`Tag`].
     ///
+    /// # Examples
     /// ```
-    /// use crate::tag::*;
+    /// use rsnbt::tag::{Tag, TagId};
     ///
     /// let string = Tag::String(String::from("Hello world!"));
     /// assert_eq!(TagId::String, string.id());
@@ -74,791 +368,36 @@ impl Tag {
 
     /// Returns the 8-bit binary ID of this tag's type.
     /// This is analogous to calling `id().byte()`.
+    /// See [`TagId::byte`].
     ///
+    /// # Examples
     /// ```
-    /// use crate::tag::Tag;
-    /// use crate::tag::TagId;
+    /// use rsnbt::tag::{Tag, TagId};
     ///
     /// let string = Tag::String(String::from("Hello world!"));
     /// assert_eq!(8, string.id_byte());
+    /// 
+    /// // id_byte() is equivalent to id().byte()
+    /// assert_eq!(string.id().byte(), string.id_byte());
     /// ```
     pub fn id_byte(&self) -> u8 {
         self.id().byte()
     }
 }
 
+/// A [`Default`] implementation for [`Tag`].
+/// The default value of [`Tag`] is a zero [byte tag][Tag::Byte].
+/// 
+/// # Examples
+/// ```
+/// use rsnbt::tag::Tag;
+/// 
+/// assert_eq!(Tag::Byte(0), Tag::default());
+/// ```
 impl Default for Tag {
     fn default() -> Self {
-        Byte(0)
+        Self::Byte(0)
     }
 }
 
-// ===========================================================================================================
-//
-//  HELPER MACROS AND FUNCTIONS
-//
-// ===========================================================================================================
 
-macro_rules! delegated_from {
-    ({$($generics:tt)*}, $from:ty, $via:ty) => {
-        impl$($generics)* From<$from> for Tag {
-            fn from(value: $from) -> Self {
-                From::<$via>::from(value)
-            }
-        }
-    };
-
-    ({$($generics:tt)*}, $from:ty, $via:ty, |$name:ident| $expr:expr) => {
-        impl$($generics)* From<$from> for Tag {
-            fn from($name: $from) -> Self {
-                From::<$via>::from($expr)
-            }
-        }
-    };
-}
-
-// ===========================================================================================================
-//
-//  CONVERSION OF NUMBERS
-//
-// ===========================================================================================================
-
-/// A trait for all types that can convert into numeric tags. This is implemented on all numeric types native
-/// to Rust, allowing things like `4.into_byte_tag()`.
-///
-/// ```
-/// use crate::tag::*;
-///
-/// assert_eq!(Tag::Long(3415), 3415.into_long_tag());
-/// assert_eq!(Tag::Byte(88), 88.into_byte_tag());
-/// ```
-pub trait IntoNumericTag {
-    fn into_byte_tag_value(self) -> i8;
-    fn into_short_tag_value(self) -> i16;
-    fn into_int_tag_value(self) -> i32;
-    fn into_long_tag_value(self) -> i64;
-    fn into_float_tag_value(self) -> f32;
-    fn into_double_tag_value(self) -> f64;
-}
-
-impl Tag {
-    pub fn byte_from<T>(v: T) -> Tag
-    where
-        T: IntoNumericTag,
-    {
-        Tag::Byte(v.into_byte_tag_value())
-    }
-
-    pub fn short_from<T>(v: T) -> Tag
-    where
-        T: IntoNumericTag,
-    {
-        Tag::Short(v.into_short_tag_value())
-    }
-
-    pub fn int_from<T>(v: T) -> Tag
-    where
-        T: IntoNumericTag,
-    {
-        Tag::Int(v.into_int_tag_value())
-    }
-
-    pub fn long_from<T>(v: T) -> Tag
-    where
-        T: IntoNumericTag,
-    {
-        Tag::Long(v.into_long_tag_value())
-    }
-
-    pub fn float_from<T>(v: T) -> Tag
-    where
-        T: IntoNumericTag,
-    {
-        Tag::Float(v.into_float_tag_value())
-    }
-
-    pub fn double_from<T>(v: T) -> Tag
-    where
-        T: IntoNumericTag,
-    {
-        Tag::Double(v.into_double_tag_value())
-    }
-}
-
-macro_rules! convert_number_impl {
-    ($name:ident, $type:ty) => {
-        impl Tag {
-            pub fn $name(&self) -> Option<$type> {
-                match self {
-                    &Tag::Byte(v) => Some(v as $type),
-                    &Tag::Short(v) => Some(v as $type),
-                    &Tag::Int(v) => Some(v as $type),
-                    &Tag::Long(v) => Some(v as $type),
-                    &Tag::Float(v) => Some(v as $type),
-                    &Tag::Double(v) => Some(v as $type),
-                    _ => None,
-                }
-            }
-        }
-
-        impl IntoNumericTag for $type {
-            fn into_byte_tag_value(self) -> i8 {
-                self as i8
-            }
-
-            fn into_short_tag_value(self) -> i16 {
-                self as i16
-            }
-
-            fn into_int_tag_value(self) -> i32 {
-                self as i32
-            }
-
-            fn into_long_tag_value(self) -> i64 {
-                self as i64
-            }
-
-            fn into_float_tag_value(self) -> f32 {
-                self as f32
-            }
-
-            fn into_double_tag_value(self) -> f64 {
-                self as f64
-            }
-        }
-    };
-
-    ($name:ident, $type:ty, $n:ident, $r:expr, $rf:expr, $b:expr, $bf:expr) => {
-        impl Tag {
-            pub fn $name(&self) -> Option<$type> {
-                match self {
-                    &Tag::Byte($n) => Some($r),
-                    &Tag::Short($n) => Some($r),
-                    &Tag::Int($n) => Some($r),
-                    &Tag::Long($n) => Some($r),
-                    &Tag::Float($n) => Some($rf),
-                    &Tag::Double($n) => Some($rf),
-                    _ => None,
-                }
-            }
-        }
-
-        impl IntoNumericTag for $type {
-            fn into_byte_tag_value(self) -> i8 {
-                let $n = self;
-                $b
-            }
-
-            fn into_short_tag_value(self) -> i16 {
-                let $n = self;
-                $b
-            }
-
-            fn into_int_tag_value(self) -> i32 {
-                let $n = self;
-                $b
-            }
-
-            fn into_long_tag_value(self) -> i64 {
-                let $n = self;
-                $b
-            }
-
-            fn into_float_tag_value(self) -> f32 {
-                let $n = self;
-                $bf
-            }
-
-            fn into_double_tag_value(self) -> f64 {
-                let $n = self;
-                $bf
-            }
-        }
-    };
-}
-
-macro_rules! simple_numeric_borrows {
-    ($type:ty, $name:ident, $name_mut:ident, $into_name:ident, $kind:ident) => {
-        impl Tag {
-            #[doc = concat!(
-                                                "If this [Tag] is a [Tag::", stringify!($kind), "], returns an immutable ",
-                                                "reference to the [", stringify!($type), "] representing the tag's value."
-                                            )]
-            ///
-            /// ```
-            /// use crate::tag::*;
-            #[doc = concat!("let tag = Tag::", stringify!($kind), "(5);")]
-            #[doc = concat!("assert_eq!(5, *tag.", stringify!($name), "());")]
-            /// ```
-            pub fn $name(&self) -> Option<&$type> {
-                if let Tag::$kind(v) = self {
-                    Some(v)
-                } else {
-                    None
-                }
-            }
-
-            #[doc = concat!(
-                                                "If this [Tag] is a [Tag::", stringify!($kind), "], returns a mutable ",
-                                                "reference to the [", stringify!($type), "] representing the tag's value, ",
-                                                "through which the value of the tag can be directly modified."
-                                            )]
-            ///
-            /// ```
-            /// use crate::tag::*;
-            #[doc = concat!("let mut tag = Tag::", stringify!($kind), "(5);")]
-            #[doc = concat!("let r = tag.", stringify!($name_mut), "();")]
-            #[doc = concat!("assert_eq!(5, *r);")]
-            ///
-            #[doc = concat!("*r = 42;")]
-            #[doc = concat!("assert_eq!(Tag::", stringify!($kind), "(42), tag);")]
-            /// ```
-            pub fn $name_mut(&mut self) -> Option<&mut $type> {
-                if let Tag::$kind(v) = self {
-                    Some(v)
-                } else {
-                    None
-                }
-            }
-
-            #[doc = concat!(
-                                                "If this [Tag] is a [Tag::", stringify!($kind), "], returns the ",
-                                                "[", stringify!($type), "] representing the tag's value."
-                                            )]
-            ///
-            /// ```
-            /// use crate::tag::*;
-            #[doc = concat!("let tag = Tag::", stringify!($kind), "(5);")]
-            #[doc = concat!("assert_eq!(5, tag.", stringify!($into_name), "());")]
-            /// ```
-            pub fn $into_name(self) -> Option<$type> {
-                if let Tag::$kind(v) = self {
-                    Some(v)
-                } else {
-                    None
-                }
-            }
-        }
-    };
-}
-
-macro_rules! numeric_from_try_into {
-    ($type:ty, $n:ident, $conv:expr, $conv_back:expr, $conv_backf:expr) => {
-        impl From<$type> for Tag {
-            fn from($n: $type) -> Self {
-                $conv
-            }
-        }
-
-        impl TryFrom<Tag> for $type {
-            type Error = Tag;
-
-            fn try_from(value: Tag) -> Result<Self, Self::Error> {
-                match value {
-                    Tag::Byte($n) => Ok($conv_back),
-                    Tag::Short($n) => Ok($conv_back),
-                    Tag::Int($n) => Ok($conv_back),
-                    Tag::Long($n) => Ok($conv_back),
-                    Tag::Float($n) => Ok($conv_backf),
-                    Tag::Double($n) => Ok($conv_backf),
-                    t => Err(t),
-                }
-            }
-        }
-    };
-}
-
-convert_number_impl!(as_i8, i8);
-convert_number_impl!(as_i16, i16);
-convert_number_impl!(as_i32, i32);
-convert_number_impl!(as_i64, i64);
-convert_number_impl!(as_i128, i128);
-convert_number_impl!(as_u8, u8);
-convert_number_impl!(as_u16, u16);
-convert_number_impl!(as_u32, u32);
-convert_number_impl!(as_u64, u64);
-convert_number_impl!(as_u128, u128);
-convert_number_impl!(as_f32, f32);
-convert_number_impl!(as_f64, f64);
-convert_number_impl!(as_isize, isize);
-convert_number_impl!(as_usize, usize);
-convert_number_impl!(
-    as_bool,
-    bool,
-    v,
-    v != 0,
-    v != 0.0,
-    if v { 1 } else { 0 },
-    if v { 1.0 } else { 0.0 }
-);
-
-numeric_from_try_into!(i8, v, Tag::Byte(v), v as i8, v as i8);
-numeric_from_try_into!(i16, v, Tag::Short(v), v as i16, v as i16);
-numeric_from_try_into!(i32, v, Tag::Int(v), v as i32, v as i32);
-numeric_from_try_into!(i64, v, Tag::Long(v), v as i64, v as i64);
-numeric_from_try_into!(u8, v, Tag::Byte(v as i8), v as u8, v as u8);
-numeric_from_try_into!(u16, v, Tag::Short(v as i16), v as u16, v as u16);
-numeric_from_try_into!(u32, v, Tag::Int(v as i32), v as u32, v as u32);
-numeric_from_try_into!(u64, v, Tag::Long(v as i64), v as u64, v as u64);
-numeric_from_try_into!(f32, v, Tag::Float(v), v as f32, v as f32);
-numeric_from_try_into!(f64, v, Tag::Double(v), v as f64, v as f64);
-numeric_from_try_into!(bool, v, Tag::Byte(if v { 1 } else { 0 }), v != 0, v != 0.0);
-numeric_from_try_into!(isize, v, Tag::Long(v as i64), v as isize, v as isize);
-numeric_from_try_into!(usize, v, Tag::Long(v as i64), v as usize, v as usize);
-
-simple_numeric_borrows!(i8, byte, byte_mut, into_byte, Byte);
-simple_numeric_borrows!(i16, short, short_mut, into_short, Short);
-simple_numeric_borrows!(i32, int, int_mut, into_int, Int);
-simple_numeric_borrows!(i64, long, long_mut, into_long, Long);
-simple_numeric_borrows!(f32, float, float_mut, into_float, Float);
-simple_numeric_borrows!(f64, double, double_mut, into_double, Double);
-
-// ===========================================================================================================
-//
-//  CONVERSION OF STRINGS
-//
-// ===========================================================================================================
-
-pub trait IntoStringTag {
-    fn into_string_tag_value(self) -> String;
-}
-
-impl IntoStringTag for String {
-    fn into_string_tag_value(self) -> String {
-        self
-    }
-}
-
-impl IntoStringTag for &str {
-    fn into_string_tag_value(self) -> String {
-        String::from(self)
-    }
-}
-
-impl Tag {
-    pub fn string(&self) -> Option<&String> {
-        if let Tag::String(str) = self {
-            Some(str)
-        } else {
-            None
-        }
-    }
-
-    pub fn string_mut(&mut self) -> Option<&mut String> {
-        if let Tag::String(str) = self {
-            Some(str)
-        } else {
-            None
-        }
-    }
-
-    pub fn into_string(self) -> Option<String> {
-        if let Tag::String(str) = self {
-            Some(str)
-        } else {
-            None
-        }
-    }
-
-    pub fn str(&self) -> Option<&str> {
-        if let Tag::String(str) = self {
-            Some(str.as_str())
-        } else {
-            None
-        }
-    }
-
-    pub fn string_from<T>(v: T) -> Tag
-    where
-        T: IntoStringTag,
-    {
-        Tag::String(v.into_string_tag_value())
-    }
-}
-
-impl From<String> for Tag {
-    fn from(v: String) -> Self {
-        Tag::String(v)
-    }
-}
-
-impl From<&str> for Tag {
-    fn from(v: &str) -> Self {
-        Tag::String(String::from(v))
-    }
-}
-
-impl TryFrom<Tag> for String {
-    type Error = Tag;
-
-    fn try_from(value: Tag) -> Result<Self, Self::Error> {
-        match value {
-            Tag::String(v) => Ok(v),
-            t => Err(t),
-        }
-    }
-}
-
-// ===========================================================================================================
-//
-//  CONVERSION OF ARRAYS
-//
-// ===========================================================================================================
-
-pub trait IntoByteArrayTag {
-    fn into_byte_array_tag_value(self) -> Vec<i8>;
-}
-
-pub trait IntoIntArrayTag {
-    fn into_int_array_tag_value(self) -> Vec<i32>;
-}
-
-pub trait IntoLongArrayTag {
-    fn into_long_array_tag_value(self) -> Vec<i64>;
-}
-
-macro_rules! into_array_tag_impl {
-    ($trait:ty, $fn:ident, $ret:ty, {$($generics:tt)*}, $type:ty) => {
-        impl$($generics)* $trait for $type {
-            fn $fn(self) -> Vec<$ret> {
-                Vec::from(self)
-            }
-        }
-    };
-
-    ($trait:ty, $fn:ident, $via:ty => $ret:ty, {$($generics:tt)*}, $type:ty) => {
-        impl$($generics)* $trait for $type {
-            fn $fn(self) -> Vec<$ret> {
-                reinterpret_vec!(Vec::from(self), $via => $ret)
-            }
-        }
-    };
-}
-
-into_array_tag_impl!(IntoByteArrayTag, into_byte_array_tag_value, u8 => i8, {<const N : usize>}, [u8; N]);
-into_array_tag_impl!(IntoByteArrayTag, into_byte_array_tag_value, u8 => i8, {<const N : usize>}, &[u8; N]);
-into_array_tag_impl!(IntoByteArrayTag, into_byte_array_tag_value, u8 => i8, {}, &[u8]);
-into_array_tag_impl!(IntoByteArrayTag, into_byte_array_tag_value, u8 => i8, {}, Vec<u8>);
-
-into_array_tag_impl!(IntoByteArrayTag, into_byte_array_tag_value, i8, {<const N : usize>}, [i8; N]);
-into_array_tag_impl!(IntoByteArrayTag, into_byte_array_tag_value, i8, {<const N : usize>}, &[i8; N]);
-into_array_tag_impl!(IntoByteArrayTag, into_byte_array_tag_value, i8, {}, &[i8]);
-into_array_tag_impl!(IntoByteArrayTag, into_byte_array_tag_value, i8, {}, Vec<i8>);
-
-into_array_tag_impl!(IntoIntArrayTag, into_int_array_tag_value, u32 => i32, {<const N : usize>}, [u32; N]);
-into_array_tag_impl!(IntoIntArrayTag, into_int_array_tag_value, u32 => i32, {<const N : usize>}, &[u32; N]);
-into_array_tag_impl!(IntoIntArrayTag, into_int_array_tag_value, u32 => i32, {}, &[u32]);
-into_array_tag_impl!(IntoIntArrayTag, into_int_array_tag_value, u32 => i32, {}, Vec<u32>);
-
-into_array_tag_impl!(IntoIntArrayTag, into_int_array_tag_value, i32, {<const N : usize>}, [i32; N]);
-into_array_tag_impl!(IntoIntArrayTag, into_int_array_tag_value, i32, {<const N : usize>}, &[i32; N]);
-into_array_tag_impl!(IntoIntArrayTag, into_int_array_tag_value, i32, {}, &[i32]);
-into_array_tag_impl!(IntoIntArrayTag, into_int_array_tag_value, i32, {}, Vec<i32>);
-
-into_array_tag_impl!(IntoLongArrayTag, into_long_array_tag_value, u64 => i64, {<const N : usize>}, [u64; N]);
-into_array_tag_impl!(IntoLongArrayTag, into_long_array_tag_value, u64 => i64, {<const N : usize>}, &[u64; N]);
-into_array_tag_impl!(IntoLongArrayTag, into_long_array_tag_value, u64 => i64, {}, &[u64]);
-into_array_tag_impl!(IntoLongArrayTag, into_long_array_tag_value, u64 => i64, {}, Vec<u64>);
-
-into_array_tag_impl!(IntoLongArrayTag, into_long_array_tag_value, i64, {<const N : usize>}, [i64; N]);
-into_array_tag_impl!(IntoLongArrayTag, into_long_array_tag_value, i64, {<const N : usize>}, &[i64; N]);
-into_array_tag_impl!(IntoLongArrayTag, into_long_array_tag_value, i64, {}, &[i64]);
-into_array_tag_impl!(IntoLongArrayTag, into_long_array_tag_value, i64, {}, Vec<i64>);
-
-impl Tag {
-    pub fn byte_array_from<T>(v: T) -> Tag
-    where
-        T: IntoByteArrayTag,
-    {
-        Tag::ByteArray(v.into_byte_array_tag_value())
-    }
-
-    pub fn int_array_from<T>(v: T) -> Tag
-    where
-        T: IntoIntArrayTag,
-    {
-        Tag::IntArray(v.into_int_array_tag_value())
-    }
-
-    pub fn long_array_from<T>(v: T) -> Tag
-    where
-        T: IntoLongArrayTag,
-    {
-        Tag::LongArray(v.into_long_array_tag_value())
-    }
-}
-
-delegated_from!({<const N: usize>}, [u8; N], &[u8; N], |value| &value);
-delegated_from!({<const N: usize>}, [u32; N], &[u32; N], |value| &value);
-delegated_from!({<const N: usize>}, [u64; N], &[u64; N], |value| &value);
-
-delegated_from!({<const N: usize>}, &[u8; N], &[u8]);
-delegated_from!({<const N: usize>}, &[u32; N], &[u32]);
-delegated_from!({<const N: usize>}, &[u64; N], &[u64]);
-
-delegated_from!({}, &[u8], Vec<i8>, |value| Vec::from(reinterpret_slice!(value, u8 => i8)));
-delegated_from!({}, &[u32], Vec<i32>, |value| Vec::from(reinterpret_slice!(value, u32 => i32)));
-delegated_from!({}, &[u64], Vec<i64>, |value| Vec::from(reinterpret_slice!(value, u64 => i64)));
-
-delegated_from!({<const N: usize>}, [i8; N], &[i8; N], |value| &value);
-delegated_from!({<const N: usize>}, [i32; N], &[i32; N], |value| &value);
-delegated_from!({<const N: usize>}, [i64; N], &[i64; N], |value| &value);
-
-delegated_from!({<const N: usize>}, &[i8; N], &[i8]);
-delegated_from!({<const N: usize>}, &[i32; N], &[i32]);
-delegated_from!({<const N: usize>}, &[i64; N], &[i64]);
-
-delegated_from!({}, &[i8], Vec<i8>, |value| Vec::from(value));
-delegated_from!({}, &[i32], Vec<i32>, |value| Vec::from(value));
-delegated_from!({}, &[i64], Vec<i64>, |value| Vec::from(value));
-
-delegated_from!({}, Vec<u8>, Vec<i8>, |value| reinterpret_vec!(value, u8 => i8));
-delegated_from!({}, Vec<u32>, Vec<i32>, |value| reinterpret_vec!(value, u32 => i32));
-delegated_from!({}, Vec<u64>, Vec<i64>, |value| reinterpret_vec!(value, u64 => i64));
-
-impl From<Vec<i8>> for Tag {
-    fn from(value: Vec<i8>) -> Self {
-        Tag::ByteArray(value)
-    }
-}
-
-impl From<Vec<i32>> for Tag {
-    fn from(value: Vec<i32>) -> Self {
-        Tag::IntArray(value)
-    }
-}
-
-impl From<Vec<i64>> for Tag {
-    fn from(value: Vec<i64>) -> Self {
-        Tag::LongArray(value)
-    }
-}
-
-impl TryFrom<Tag> for Vec<i8> {
-    type Error = Tag;
-
-    fn try_from(value: Tag) -> Result<Self, Self::Error> {
-        match value {
-            Tag::ByteArray(v) => Ok(v),
-            t => Err(t),
-        }
-    }
-}
-
-impl TryFrom<Tag> for Vec<u8> {
-    type Error = Tag;
-
-    fn try_from(value: Tag) -> Result<Self, Self::Error> {
-        match value {
-            Tag::ByteArray(v) => Ok(reinterpret_vec!(v, i8 => u8)),
-            t => Err(t),
-        }
-    }
-}
-
-impl TryFrom<Tag> for Vec<i32> {
-    type Error = Tag;
-
-    fn try_from(value: Tag) -> Result<Self, Self::Error> {
-        match value {
-            Tag::IntArray(v) => Ok(v),
-            t => Err(t),
-        }
-    }
-}
-
-impl TryFrom<Tag> for Vec<u32> {
-    type Error = Tag;
-
-    fn try_from(value: Tag) -> Result<Self, Self::Error> {
-        match value {
-            Tag::IntArray(v) => Ok(reinterpret_vec!(v, i32 => u32)),
-            t => Err(t),
-        }
-    }
-}
-
-impl TryFrom<Tag> for Vec<i64> {
-    type Error = Tag;
-
-    fn try_from(value: Tag) -> Result<Self, Self::Error> {
-        match value {
-            Tag::LongArray(v) => Ok(v),
-            t => Err(t),
-        }
-    }
-}
-
-impl TryFrom<Tag> for Vec<u64> {
-    type Error = Tag;
-
-    fn try_from(value: Tag) -> Result<Self, Self::Error> {
-        match value {
-            Tag::LongArray(v) => Ok(reinterpret_vec!(v, i64 => u64)),
-            t => Err(t),
-        }
-    }
-}
-
-// ===========================================================================================================
-//
-//  CONVERSION OF LISTS AND COMPOUNDS
-//
-// ===========================================================================================================
-
-pub trait IntoListTag {
-    fn into_list_tag_value(self) -> TagList;
-}
-
-pub trait IntoCompoundTag {
-    fn into_compound_tag_value(self) -> TagMap;
-}
-
-impl IntoListTag for TagList {
-    fn into_list_tag_value(self) -> TagList {
-        self
-    }
-}
-
-impl IntoCompoundTag for TagMap {
-    fn into_compound_tag_value(self) -> TagMap {
-        self
-    }
-}
-
-impl From<TagList> for Tag {
-    fn from(value: TagList) -> Self {
-        Self::List(value)
-    }
-}
-
-impl From<TagMap> for Tag {
-    fn from(value: TagMap) -> Self {
-        Self::Compound(value)
-    }
-}
-
-impl TryFrom<Tag> for TagList {
-    type Error = Tag;
-
-    fn try_from(value: Tag) -> Result<Self, Self::Error> {
-        match value {
-            Tag::List(v) => Ok(v),
-            t => Err(t),
-        }
-    }
-}
-
-impl TryFrom<Tag> for TagMap {
-    type Error = Tag;
-
-    fn try_from(value: Tag) -> Result<Self, Self::Error> {
-        match value {
-            Tag::Compound(v) => Ok(v),
-            t => Err(t),
-        }
-    }
-}
-
-// ===========================================================================================================
-//
-//  CASTING
-//
-// ===========================================================================================================
-
-impl Tag {
-    pub fn try_cast(self, id: TagId) -> Result<Tag, Tag> {
-        Ok(match id {
-            TagId::Byte => Tag::Byte(match self {
-                Tag::Byte(v) => v as i8,
-                Tag::Short(v) => v as i8,
-                Tag::Int(v) => v as i8,
-                Tag::Long(v) => v as i8,
-                Tag::Float(v) => v as i8,
-                Tag::Double(v) => v as i8,
-                tag => Err(tag)?,
-            }),
-
-            TagId::Short => Tag::Short(match self {
-                Tag::Byte(v) => v as i16,
-                Tag::Short(v) => v as i16,
-                Tag::Int(v) => v as i16,
-                Tag::Long(v) => v as i16,
-                Tag::Float(v) => v as i16,
-                Tag::Double(v) => v as i16,
-                tag => Err(tag)?,
-            }),
-
-            TagId::Int => Tag::Int(match self {
-                Tag::Byte(v) => v as i32,
-                Tag::Short(v) => v as i32,
-                Tag::Int(v) => v as i32,
-                Tag::Long(v) => v as i32,
-                Tag::Float(v) => v as i32,
-                Tag::Double(v) => v as i32,
-                tag => Err(tag)?,
-            }),
-
-            TagId::Long => Tag::Long(match self {
-                Tag::Byte(v) => v as i64,
-                Tag::Short(v) => v as i64,
-                Tag::Int(v) => v as i64,
-                Tag::Long(v) => v as i64,
-                Tag::Float(v) => v as i64,
-                Tag::Double(v) => v as i64,
-                tag => Err(tag)?,
-            }),
-
-            TagId::Float => Tag::Float(match self {
-                Tag::Byte(v) => v as f32,
-                Tag::Short(v) => v as f32,
-                Tag::Int(v) => v as f32,
-                Tag::Long(v) => v as f32,
-                Tag::Float(v) => v as f32,
-                Tag::Double(v) => v as f32,
-                tag => Err(tag)?,
-            }),
-
-            TagId::Double => Tag::Double(match self {
-                Tag::Byte(v) => v as f64,
-                Tag::Short(v) => v as f64,
-                Tag::Int(v) => v as f64,
-                Tag::Long(v) => v as f64,
-                Tag::Float(v) => v as f64,
-                Tag::Double(v) => v as f64,
-                tag => Err(tag)?,
-            }),
-
-            id => {
-                if id != self.id() {
-                    Err(self)?
-                } else {
-                    self
-                }
-            },
-        })
-    }
-}
-
-// ===========================================================================================================
-//
-//  TESTING
-//
-// ===========================================================================================================
-
-#[cfg(test)]
-mod test {
-    use crate::tag::*;
-
-    #[test]
-    fn test_conv() {
-        let c: u128 = 3415;
-
-        assert_eq!(Tag::Long(3415), Tag::long_from(c));
-    }
-
-    #[test]
-    fn test_conv_2() {
-        assert_eq!(Tag::Long(3415), Tag::long_from(3415));
-    }
-}

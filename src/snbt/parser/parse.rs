@@ -359,7 +359,7 @@ where
                     list.into_iter()
                         .map(|v| match v {
                             Tag::List(c) if !wrap_always => c,
-                            other => TagList::singleton(other),
+                            other => TagList::just(other),
                         })
                         .collect()
                 } else {

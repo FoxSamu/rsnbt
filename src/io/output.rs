@@ -535,7 +535,7 @@ mod test {
 
     #[test]
     fn test_write() {
-        let data = tag_map! {
+        let data = Tag::Compound(tag_map! {
             "foo": 1,
             "bar": 2,
             "baz": tag_list! [1, 2, 3],
@@ -543,7 +543,7 @@ mod test {
                 "mos": "ris",
                 "ken": true
             }
-        };
+        });
 
         let mut file = File::create("../../test_data/test.dat").unwrap();
 
