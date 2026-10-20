@@ -2,5 +2,6 @@
 /test_data
 /out
 /.idea
+/book/book
 
 Cargo.lock
