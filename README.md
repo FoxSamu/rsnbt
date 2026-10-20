@@ -17,16 +17,17 @@ _Minecraft: Java Edition_ files.
 |------------------------------------|-------------|-------------|------------------|----------------------------|
 | Base NBT tree model                | Completed   | Mostly done | `rsnbt::tag`     | Core                       |
 | NBT codec I/O                      | Completed   | WIP         | `rsnbt::io`      | `io` (included by default) |
-| Packing & unpacing                 | WIP         | WIP         | `rsnbt::tag` (currently) | Core (currently)   |
+| Packing & unpacking                | WIP         | WIP         | `rsnbt::tag` (currently) | Core (currently)   |
 | NBT visitors                       | Not Started | N/A         | N/A              | N/A                        |
+| NBT paths                          | Not Started | N/A         | N/A              | N/A                        |
 | SNBT parsing & serialization       | WIP         | WIP         | `rsnbt::snbt`    | `snbt`                     |
 | LZ4Block codec[^lz4b]              | Completed   | WIP         | `rsnbt::lz4b`    | `lz4b`                     |
 | MCR/MCA region file toolkit        | Testing     | WIP         | `rsnbt::region`  | `region`                   |
-| Concurrent chunk database          | Not tarted  | N/A         | N/A              | N/A                        |
 | Bitpacking[^intpack]               | Completed   | WIP         | `rsnbt::bitpack` | `bitpack`                  |
 
 ## Low priority
 - [ ] Bedrock LevelDB support[^leveldb]
+- [ ] Concurrent chunk database
 
 [^lz4b]: Minecraft uses the [lz4-java](https://github.com/yawkat/lz4-java/) 
 library to handle LZ4 compression. This library comes with a non-conventional 
