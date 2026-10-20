@@ -517,6 +517,7 @@ impl TagMap {
     // - Sorting
     // - Reordering
     // - Reversing
+    // - Better docs
 }
 
 impl Debug for TagMap {
