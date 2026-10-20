@@ -13,22 +13,20 @@ This crate is currently in heavy development. Here is a roadmap of the things
 we want to achieve with this crate. Currently, my focus is mainly on handling
 _Minecraft: Java Edition_ files.
 
-## High priority
-- [x] Base NBT tree model -> `rsnbt::tag`
-- [x] NBT codec -> `rsnbt::io`
-- [ ] NBT visitors
-- [ ] SNBT parsing & writing -> WIP `rsnbt::snbt`
-- [x] LZ4Block codec[^lz4b] -> `rsnbt::lz4b`
-- [ ] MCR/MCA region file toolkit -> WIP `rsnbt::region`
-- [ ] Concurrent chunk database
-- [ ] Packing integers[^intpack]
-- [ ] Testing and docs
-- [ ] Release on [crates.io](https://crates.io/)
+| API                                | Status      | Docs Status | Module           | Feature                    |
+|------------------------------------|-------------|-------------|------------------|----------------------------|
+| Base NBT tree model                | Completed   | Mostly done | `rsnbt::tag`     | Core                       |
+| NBT codec I/O                      | Completed   | WIP         | `rsnbt::io`      | `io` (included by default) |
+| Packing & unpacing                 | WIP         | WIP         | `rsnbt::tag` (currently) | Core (currently)   |
+| NBT visitors                       | Not Started | N/A         | N/A              | N/A                        |
+| SNBT parsing & serialization       | WIP         | WIP         | `rsnbt::snbt`    | `snbt`                     |
+| LZ4Block codec[^lz4b]              | Completed   | WIP         | `rsnbt::lz4b`    | `lz4b`                     |
+| MCR/MCA region file toolkit        | Testing     | WIP         | `rsnbt::region`  | `region`                   |
+| Concurrent chunk database          | Not tarted  | N/A         | N/A              | N/A                        |
+| Bitpacking[^intpack]               | Completed   | WIP         | `rsnbt::bitpack` | `bitpack`                  |
 
 ## Low priority
 - [ ] Bedrock LevelDB support[^leveldb]
-- [ ] Serialisation interface
-- [ ] Further understanding of data
 
 [^lz4b]: Minecraft uses the [lz4-java](https://github.com/yawkat/lz4-java/) 
 library to handle LZ4 compression. This library comes with a non-conventional 
