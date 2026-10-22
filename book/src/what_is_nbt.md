@@ -26,7 +26,7 @@ Name
 Payload
 : The data stored in a tag, formatted in accordance to the _tag ID_.
 
-### Types
+## Tag Types
 As we just discussed, the tag ID tells us exactly how a tag's payload is structured. This tag ID is a number (more specifically, it's a single byte), and a different number means a different format. We'll see each tag in more detail soon, but here's an overview.
 
 | ID     | Tag Type   | Description                                                                                 |
@@ -46,7 +46,23 @@ As we just discussed, the tag ID tells us exactly how a tag's payload is structu
 |   12   | Long Array | An array of Long values (each 8 bytes). Not supported by old versions of Minecraft (<1.13). |
 |   13+  | Reserved   | These IDs are unused.                                                                       |
 
-### Primitives
+## Compression
+Before I will take you into each tag in more depth, we need to address an important feature of NBT: **compression**. Minecrat compresses NBT files to make them smaller. Minecraft tends to often compress NBT data, but it is rather inconsistent with its compression schemes.
+
+Compression
+: Reducing the amount of bytes a blob of data uses, by detecting patters that can be reduced.
+
+NBT exported by Minecraft is always in one of four compression types:
+- uncompressed, i.e. you can read the NBT directly from the file without decompressing it;
+- compressed with GZip, a common and fast compression algorithm;
+- compressed with Zlib, an alternative to GZip that is slightly simpler;
+- compressed with LZ4Block.
+
+The latter of the four, LZ4Block, is not a standard compression format. Minecraft uses a library for LZ4 compression (which _is_ standard). This library has a compression format that _uses_ LZ4, but in a non-conventional way. The format is not too hard if you know how to use an LZ4 library, but it is a challenging issue to overcome when you are writing NBT decoders. Luckily, LZ4Block is only used in region files, which deserve an entire chapter on their own. For now, we'll focus purely on loose NBT files, which do not use LZ4Block. We will cover LZ4 and LZ4Block in a future chapter about region files. RSNBT includes support for LZ4Block.
+
+GZip and Zlib are well-established compression algorithms, and lots of libraries exist for to help with the compression and decompression into and from these formats. Both of these compression formats use the [DEFLATE](https://en.wikipedia.org/wiki/Deflate) compression algorithm. DEFLATE is very complex, so I do not recommend trying to understand it just for the purpose of NBT. Instead, use a library and focus on decoding the NBT. GZip is shipped with Java's standard library even, and Zlib can be utilised using [JZlib](https://www.jcraft.com/jzlib/). In Rust, you can use the [`flate2`](https://crates.io/crates/flate2) crate, which supports both GZip and Zlib. RSNBT uses this library internally.
+
+## Primitives
 When we mention **primitive tags** or **primitives**, what we mean is any tag with a type ID from 1 to 6 (inclusive). Those are: _Byte_, _Short_, _Int_, _Long_, _Float_ and _Double_. All of these are numeric values, and typically represent numbers, though other than Float and Double, they are also often used to store more compressed data. The primitives are named after their equivalent types types in Java: `byte`, `short`, `int`, `long`, `float` and `double`. If you know what each of these types is in Java, then you know exactly what the payloads of these tags look like.
 
 Primitive Tag
@@ -102,7 +118,7 @@ Good, now you're up to date on what floats are. NBT allows storing _single-preci
 
 The limits in the above table only detail the range of finite, positive values that can be represented using each float type. They do not include zero, negative zero, infinity, negative infinity and NaN, which can all also be represented using either float type.
 
-### Side quest 1: Endianness
+### Side Quest 1: Endianness
 Ah yes, endianness, one of the many ways in which computer systems have never come to an agreement. **Endianness**, sometimes called **byte order**, defines in which order numeric values are split into bytes. We have two types of endianness, _big-endian_ and _little-endian_.
 
 Endianness
@@ -134,7 +150,7 @@ Now here is the conclusion that you have been waiting for. **NBT uses big-endian
 
 The endianness of NBT applies to all numeric values used throughout the format. This includes all primitives, but it's not limited to it. For example, as we'll see in a bit, arrays, lists and strings all carry a length as part of their payload, which is a number that is subject to endianness.
 
-### Strings
+## Names & Strings
 Alright, enough about numbers, how do we store text? Well, we've already briefly mentioned tag names: these are strings, but the name of a tag is supposed to be unique among a collection of tags, so this is not ideal when you are storing for example the different lines of text on a sign. When reading collections of tags, NBT readers most often discard any duplicate names and only keep the name they read last. This means that if we have a sign with four lines just saying "AAA", then we would only ever see the last line of text if we stored this text in the name of a tag. Not ideal.
 
 The **String** tag prevents this, by allowing us to store text not as a name but as a payload. The name of a tag actually follows the exact same format as a String payload, namely a 2-byte length followed by that amount of UTF-8 bytes.
@@ -160,7 +176,7 @@ Unsigned Number
 Signed Number
 : As opposed to an unsigned number, a number that can be negative. The maximum is only half that of an unsigned number.
 
-### Side quest 2: UTF-8
+### Side Quest 2: UTF-8
 Tag names and strings follow the **UTF-8** standard for encoding text. This means that the character scheme is inherently the Unicode character table. UTF-8 is the de-facto standard for text encoding nowadays, as it is compact, efficient to encode and decode, and it covers the entire **Unicode** table and therefore every possible character you ever wish to store in your string.
 
 UTF-8 is usually naturally supported by the language you are working in. For example, the Rust standard library expects that strings are UTF-8 and may behave in undefined ways if strings are not UTF-8. However, many languages also use UTF-16 (Java does this), which is a bit easier to deal with when manipulating strings, but it is less common and works a bit strangely (plus it is subject to endianness, while UTF-8 is not). There are many resources describing UTF-8 in more detail, but fear not because UTF-8 is actually pretty simple.
@@ -213,12 +229,12 @@ As a cherry on top of illegal UTF-8 sequences, we have any byte of the form `111
 
 Now usually you do not need to perform the UTF-8 conversion yourself. Programming languages often handle UTF-8 directly, or have the tools to convert from UTF-8 to the format used by the programming language. Nevertheless, it is relevant for NBT as that specifically uses UTF-8 encoding for tag names and String payloads. 
 
-### Arrays
+## Arrays
 NBT has three dedicated array tags: **Byte Arrays**, **Int Arrays** and **Long Arrays**. Each of these stores amount of integers. These integers follow the same payload semantics as their respective primitive payloads.
 
 In the very beginning, NBT only had Byte Array tags. Not much later, Int Array tags were added. These two used to be the only kinds of array tags in NBT for a long while, until Minecraft 1.12 came around and introduced Long Array tags. For backwards compatibility, the tag IDs of Int Array tags (11) and Long Array tags (12) are not coherent with the tag ID of Byte Array tags (7).
 
-Each of the three array tags begins with a **signed** 32-bit integer (4 bytes), which indicates the length of the array. Making the array length signed is a bit of a weird decision, but Java does not have unsigned numbers, and arrays in Java cannot have more than 2147483647 elements (the limit of a signed 32-bit integer). The exact limit depends on the JVM used, it's usually slightly less than the mentioned value, but never more.
+Each of the three array tags begins with a **signed** 32-bit integer (4 bytes), which indicates the length of the array. Making the array length signed is a bit of a weird decision, but Java does not have unsigned numbers, and arrays in Java cannot have more than 2147483647 elements (the limit of a signed 32-bit integer). The exact limit depends on the JVM used, it's usually slightly less than the mentioned value, but never more. Note that a negative length is naturally not valid.
 
 Following the length is that length amount of integers, packed tightly together. For Byte Arrays, each element is one byte long, for Int Arrays, each element is four bytes long, and for Long Arrays, each element is eight bytes long. Like primitives, these integers are all signed and follow the endianness of all other numbers.
 
@@ -233,13 +249,28 @@ Following the length is that length amount of integers, packed tightly together.
 > [!IMPORTANT]
 > Unlike in names and String tags, the length indicates the number of _elements_, not the number of _bytes_. This means that an Int Array tag can take up more bytes than a Byte Array tag can.
 
-### Lists
+## Lists
 A **List** tag is a tag that stores an arbitrary amount of tag _payloads_ of some type. Every payload in a List tag is of the same type, but the type can be different per List tag. This is enabled by the first byte of a List tag's payload, which indicates the tag ID of the payloads.
 
-What follows the initial element tag ID of the List is mostly the same as the Array tags.
+What follows the initial element tag ID of the List is mostly the same as the Array tags. First comes a 32-bit length, again _signed_. Then follows that length amount of payloads, packed tightly. Note that, unlike with arrays, each payload can be a different width. This is not the case if you make a list with primitive payloads, but it happens when you put for example String payloads in a list.
 
-### Side quest 3: Lists vs Arrays
-Now you might wonder: why do there exist specific Byte Array, Int Array and Long Array tags? This has to do with a small optimization used by _Minecraft: Java Edition_. You see, Java is a language that uses **garbage collection**, a technique where unused memory is automatically cleaned up. Let's have a little look into how this impacts the design of NBT.
+| Byte    | Length (in bytes)                                             | Data                     |
+|:-------:|:-------------------------------------------------------------:|--------------------------|
+| 0       | 1                                                             | Tag ID                   |
+| 2       | 2                                                             | Name length: _N_         |
+| 3       | _N_                                                           | Name bytes               |
+| _N_ + 3 | 1                                                             | Element ID: _I_          |
+| _N_ + 4 | 4                                                             | List length: _M_         |
+| _N_ + 7 | varying <br/> (each element can be different)                 | _M_ payloads of type _I_ |
+
+> [!IMPORTANT]
+> The element tag ID that identifies the types of payloads in a list is often zero when the list is empty. The zero ID is the End indicator, which we'll see soon as we cover compound tags. The reason is that the type does not actually matter for an empty list: it is empty so whatever type it was assigned will not be relevant for determining how many elements we should decode from it. In older NBT you'll see the Byte type often used for empty lists.
+
+> [!NOTE]
+> List tags can have arbitrary types of payloads. This means that you can create a List tag with List payloads. In this case, each separate payload includes its own element type ID.
+
+### Side QUest 3: Lists vs Arrays
+Now you might wonder: why do there exist specific Byte Array, Int Array and Long Array tags? And that is a good thing to wonder about: with just one extra byte you can do the same with a List tag. The reason for this is a small optimization used by _Minecraft: Java Edition_. You see, Java is a language that uses **garbage collection**, a technique where unused memory is automatically cleaned up. This may seem completely irrelevant to NBT, but it turns out it actually has had an impact on its design and it's often overlooked.
 
 A **garbage collector**, or **GC** for short, is a task that automatically runs in the background of any Java program, and it constantly tracks any memory you allocate. Once you stop using some memory, it will notice this, and eventually clean up the memory. This is opposed to a language like C or C++, where you manually request memory from the operating system, and have to manually return it. The operating system will never know whether you are done with some memory or not, so if you forget to return your memory, it will linger unused, just uselessly taking up space in your RAM until the program exits. This is called a **memory leak**.
 
@@ -267,3 +298,122 @@ Polymorphism
 : A notion where a value is allowed to be of a variety of types. NBT is polymorphic as it has different types of tags.
 
 This, and exactly this, is why NBT has separate Array tags. Numeric values are not objects in Java, they do not need allocations. Thus, Array tags have a slight performance advantage.
+
+## Compounds
+Last, but definitely not least, we have Compound tags. Compound tags are what you have been reading up to this entire document: they are the backbone of NBT, and all the concepts we have thus far left unexplained will finally all come together!
+
+A **Compound tag**, or simply **Compound**, is a tag that stores a collection of tags. Unlike lists and arrays, compound tags store entire tags, not just payloads. Additionally, while tags in a Compound appear in some specific order when encoded, the order is not really important to Minecraft. Instead, this is where the names of tags come in: each tag name must be unique in a Compound payload. This is how you identify tags within a Compound tag.
+
+Compound tags begin with the same tag header as other tags: a type ID and a name. It's payload is then a sequence of tags in no particular order, each with their own type ID, name and payload, formatted as usual. The final byte of a Compound payload is the **End** marker: a zero byte. There is no length, just a sequence of tags delimited by the End marker. This is what tag ID 0 was reserved for all along!
+
+Imagine you are reading a Compound payload. You will have to repeatedly read one tag ID, then if that's not 0 you read the rest of the tag. If it is 0, you have found the end and you are done! This is why tag ID 0 can't be also used by a tag format: it would otherwise be impossible to differentiate the end of a Compound from that tag type.
+
+> [!NOTE]
+> Most resources you find about NBT specify the ID 0 to be a special kind of tag with no name or payload: the End tag. However, I think this is confusing because nowhere in the NBT format are they accepted as tags. The only two occurrences are for the payloads of empty lists, or the end of a Compound tag. For that reason, I won't call them tags, but rather a marker.
+
+### Side Quest 4: Table Structures
+In memory, compound tags are often represented as a **hashtable**, mapping names to tag payloads in no particular order. In these data structures, each name can only ever be assigned one value, and whenever a name is assigned a value for a second time, the first value will be discarded. This means that whenever two tags in a Compound tag share the same name, the one that appears later will simply overwrite the one that appears earlier. This phenomenon occurs in JSON as well. The following is valid JSON, but its behaviour depends on the implementation:
+
+```json
+{
+    "hello": "world",
+    "ipsum": "lorem",
+    "hello": "earth",
+}
+```
+
+The above example may be interpreted in various ways. Here are some things that might happen:
+- the duplicate keys and the exact order thereof is preserved;
+  ```json
+  { "hello": "world", "ipsum": "lorem", "hello": "earth" }
+  ```
+- the order is preserved but only the last duplicate key is remembered;
+  ```json
+  { "hello": "earth", "ipsum": "lorem" }
+  ```
+- the order is preserved but only the first duplicate key is remembered;
+  ```json
+  { "hello": "world", "ipsum": "lorem" }
+  ```
+- the order is not preserved and nor are duplicates;
+  ```json
+  { "hello": "earth", "ipsum": "lorem" }
+  ```
+- the parser simply rejects the duplicte key.
+  ```
+  JSON Error: duplicate key "hello".
+  ```
+
+The smartest JSON libraries will use a **linked multi-hashtable**, which is a data structure that can map one name to a multitude of values, while also preserving a specific order of elements. This preserves all information about order and duplicate keys, and will thus preserve the exact object as denoted above. Less smart but still smart JSON libraries will just use a **linked hashtable**, which maps each name to a single value, but preserves the specific order in which elements were encountered. In this case, usually the last seen element with a specific name is remembered, though some parsers will simply not overwrite duplicate names. Finally, a simple JSON library will just use a simple **hashtable**, which does not preserve order nor duplicates. Some JSON libraries may also just use a **multi-hashtable**, which preserves duplicates but discards order.
+
+A similar thing happens with NBT. Minecraft is lazy and just uses a simple hashtable. Many other NBT tools use a linked hashtable. W
+
+To put it in a little overview:
+
+| Data Structure             | Preserves Order | Preserves Duplicates | Difficulty      |
+|----------------------------|-----------------|----------------------|-----------------|
+| **Hashtable**              | No              | No                   | Easy            |
+| **Linked Hashtable**       | Yes             | No                   | Medium          |
+| **Multi-Hashtable**        | No              | Yes                  | Relatively Easy |
+| **Linked Multi-Hashtable** | Yes             | Yes                  | Hard            |
+
+Multi-hashtables are essentially just hashtables where each name is assigned not one payload, but a list of payloads. This doesn't really hold up with linked multi-hashtables, since they would have to remember the order of each individual reapperance of a key. That is, one occurence of a key may be at the very beginning of the order, while the second occurence might be at the end. Using just a linked hashtable with lists, you will lose this information.
+
+You can see that the name "linked" maps directly to order preservation, and the name "multi" maps directly to duplicate preservation. Linked variants keep a linked list alongside a hashtable-like structure to preserve the order of elements. Multi-hashtables keep a list of values under each name, rather than one single value.
+
+I am not going to explain the datastructures in detail. There are plenty of libraries that support these data structures out of the box, and some languages even ship some or all of them in their standard library. For example, Java ships `java.util.HashMap` and `java.util.LinkedHashMap` out of the box. The Rust standard library ships `std::collections::HashMap`. These data structures are well-researched, so if you want to implement them yourself, there are also plenty of resources about them online.
+
+> [!TIP]
+> All the data structures mentioned above are made for fast lookup by name. If this is not your priority, you can also just store tags in an ordered list (e.g. `java.util.ArrayList` in Java or `std::Vec` in Rust). This preserves order and duplicates just like a linked multi-hashtable would, except looking up tags by name is much slower. Lists are very simple data structures, so this is useful if you just want to reexport the data in some different format.
+
+## Putting It All Together
+
+Ok, that was a lot. Let's recap some things:
+
+- Every tag starst with a tag ID, which represents its type. Tag ID 0 is reserved to mark the end of Compound tags, and occasionally as the type of an empty List tag.
+
+- Every tag also has a name, which identifies the tag among others in a Compound tag. Even if a tag is not in a Compound tag, it still has a name, which is often an empty string.
+
+- Primitive tags have payloads of up to 8 bytes, depending on the type. They are all numeric tags, 4 integer tags (Byte, Short, Int, Long) and 2 floating point tags (Float, Double).
+
+- String tags have payloads that are exactly like names, allowing for storing up to 65,536 bytes of UTF-8 encoded text.
+
+- Array are simple collections of numbers, whose sizes are either 1 byte (Byte Array), 4 bytes (Int Array) or 8 bytes (Long Array). Each array can store up to 2,147,483,648 elements.
+
+- List tags are collections of arbitary types of payloads, but all the payloads in a list are the same type. Lists can store up to 2,147,483,648 elements.
+
+- Compound tags group tags together, identified by their name. They can have endlessly many tags, as long as they are delimited by an end marker.
+
+We also took some side quests into endianness, UTF-8, why garbage collection plays a role in NBT's design, and what data structures you could use for compound tags. Using this, you should be all-set for reading and writing NBT data. However, before I close this chapter, there are still a few more things that are worth mentioning.
+
+### Bedrock Edition
+We've already extensively covered endianness and why it matters for NBT. We have seen that _Minecraft: Java Edition_ uses big-endian numbers, whereas _Minecraft: Bedrock Edition_ uses little-endian. However, this is not the only difference between Java Edition and Bedrock Edition NBT.
+
+This has to do specifically with the _level.dat_ file. Both Java Edition and Bedrock Edition have a _level.dat_, and both use NBT, but their formats are entirely different. In addition, the Bedrock Edition _level.dat_ comes with an additional 8-byte header. This header consists of two little-endian 32-bit integers. The first of these is a version number, indicating the version of the tool that exported the file. The other integer indicates the length of the entire file (minus the header), in bytes. This length is not really necessary, but Bedrock Edition expects it to be correct.
+
+The Java Edition _level.dat_ does not have this header.
+
+### SNBT
+At the beginning of this chapter, I mentioned that NBT is not human-readable. It is a binary format intended to be read by computers. However, _Minecraft: Java Edition_ specifically supports a more human-readable version of NBT called **String NBT**, or **SNBT** for short. This is the NBT format you often use in commands when specifying NBT data for entities. E.g. to summon a baby sheep, you can do `/summon sheep ~ ~ ~ {Age: -24000}`. This spawns a sheep with the `Age` property set to -24000 in its NBT. The `{Age: -24000}` part here is SNBT.
+
+SNBT
+: A human-readable form of NBT.
+
+SNBT is very similar to JSON, with the main differences being:
+- numbers must respect their limits and can have different types, to accomodate the different primitives of NBT;
+- arrays can have differen types, to accomodate the different array and list tags of NBT;
+- strings don't need quotes.
+
+There are several other differences, but these are not as significant. Here's an example of SNBT:
+```js
+{
+  foo: 1B,
+  bar: "baz",
+  gus: [B; 1, 2, 3]
+}
+```
+
+SNBT is worth a chapter on its own. It's an entirely different format and it has its own significance in the Minecraft ecosystem. That's why we will not discuss it in this chapter.
+
+## Conclusion
+That finally concludes this chapter. If you made it here, you've come a long way. If you are new to programming, I encourage you to build a program that can read NBT files. It gives you a good understanding of binary formats, and the concepts of I/O. Make sure to always _copy_ (not move) NBT files from your Minecraft worlds, so you do not corrupt your worlds.
