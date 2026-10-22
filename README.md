@@ -24,6 +24,8 @@ _Minecraft: Java Edition_ files.
 | LZ4Block codec[^lz4b]              | Completed   | WIP         | `rsnbt::lz4b`    | `lz4b`                     |
 | MCR/MCA region file toolkit        | Testing     | WIP         | `rsnbt::region`  | `region`                   |
 | Bitpacking[^intpack]               | Completed   | WIP         | `rsnbt::bitpack` | `bitpack`                  |
+| Book                               | WIP         | N/A         | N/A              | N/A                        |
+| Linked multi-hashtable `TagMap`    | Not Started | N/A         | `rsnbt::tag`     | Core (exists but is just a linked hashtable at the moment) |
 
 ## Low priority
 - [ ] Bedrock LevelDB support[^leveldb]
