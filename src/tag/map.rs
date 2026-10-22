@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::marker::PhantomData;
+use std::mem::swap;
 use std::ops::Deref;
 use std::ptr::*;
 
@@ -138,64 +139,8 @@ impl TagMap {
         }
     }
 
-    fn add_node(&mut self, node: Node, end: bool) {
-        // Get a key reference
-        let key_ref = node.key_ref();
-
-        // This method only adds new nodes
-        if self.map.contains_key(&key_ref) {
-            panic!("Cannot overwrite node");
-        }
-
-        // Box node to fix its pointer
-        let mut boxed_node = Box::new(node);
-
-        // Link node
-        Self::link_node(&mut self.head, &mut self.tail, boxed_node.as_mut(), end);
-
-        // Insert node into map
-        self.map.insert(key_ref, boxed_node);
-    }
-
-    fn put_node(&mut self, node: Node, insert_mode: InsertMode) -> Option<Node> {
-        // Get a key reference
-        let key_ref = node.key_ref();
-
-        let (keep_position, end) = match insert_mode {
-            InsertMode::Start => (false, false),
-            InsertMode::End => (false, true),
-            InsertMode::KeepPositionOtherwiseStart => (true, false),
-            InsertMode::KeepPositionOtherwiseEnd => (true, true),
-        };
-
-        // Add node if not new
-        let existing = if let Some(v) = self.map.get(&key_ref) {
-            v
-        } else {
-            self.add_node(node, end);
-            return None;
-        };
-
-        // Box node to fix its pointer
-        let mut boxed_node = Box::new(node);
-
-        // Relink node
-        if keep_position {
-            // Relink in place
-            Self::relink_node(&mut self.head, &mut self.tail, existing, boxed_node.as_mut());
-        } else {
-            // Unlink existing
-            Self::unlink_node(&mut self.head, &mut self.tail, existing);
-
-            // Link new at desired end
-            Self::link_node(&mut self.head, &mut self.tail, boxed_node.as_mut(), end);
-        }
-
-        // Update node in map
-        Some(*self.map.insert(key_ref, boxed_node).unwrap())
-    }
-
-    fn relink_node(head: &mut *mut Node, tail: &mut *mut Node, existing: &Node, new: &mut Node) {
+    /// Replace a node in the linked list with a new one.
+    fn link_overwrite(head: &mut *mut Node, tail: &mut *mut Node, existing: &Node, new: &mut Node) {
         let prev = existing.prev;
         let next = existing.next;
 
@@ -222,7 +167,8 @@ impl TagMap {
         }
     }
 
-    fn link_node(head: &mut *mut Node, tail: &mut *mut Node, node: &mut Node, end: bool) {
+    /// Append a node to the linked list.
+    fn link_push(head: &mut *mut Node, tail: &mut *mut Node, node: &mut Node, end: bool) {
         let node_ptr = node as *mut Node;
         if end {
             unsafe {
@@ -263,22 +209,31 @@ impl TagMap {
         }
     }
 
-    fn unlink_node(head: &mut *mut Node, tail: &mut *mut Node, node: &Node) {
+    /// Removes a node from the linked list.
+    fn link_remove(head: &mut *mut Node, tail: &mut *mut Node, node: &Node) {
         unsafe {
             if node.prev.is_null() && node.next.is_null() {
+                // Node was only node
+                
                 *head = null_mut();
                 *tail = null_mut();
             } else if node.prev.is_null() {
+                // Node was first node
+
                 let next = node.next;
 
                 (*next).prev = null_mut();
                 *head = next;
             } else if node.next.is_null() {
+                // Node was last node
+
                 let prev = node.prev;
 
                 (*prev).next = null_mut();
                 *tail = prev;
             } else {
+                // Node was neither first nor last
+
                 let prev = node.prev;
                 let next = node.next;
 
@@ -288,12 +243,73 @@ impl TagMap {
         }
     }
 
+    fn add_node(&mut self, node: Node, end: bool) {
+        // Get a key reference
+        let key_ref = node.key_ref();
+
+        // This method only adds new nodes
+        if self.map.contains_key(&key_ref) {
+            panic!("Cannot overwrite node");
+        }
+
+        // Box node to fix its pointer
+        let mut boxed_node = Box::new(node);
+
+        // Link node
+        Self::link_push(&mut self.head, &mut self.tail, boxed_node.as_mut(), end);
+
+        // Insert node into map
+        self.map.insert(key_ref, boxed_node);
+    }
+
+    fn put_node(&mut self, node: Node, insert_mode: InsertMode) -> Option<Node> {
+        // Get a key reference
+        let key_ref = node.key_ref();
+
+        let (keep_position, end) = match insert_mode {
+            InsertMode::Start => (false, false),
+            InsertMode::End => (false, true),
+            InsertMode::KeepPositionOtherwiseStart => (true, false),
+            InsertMode::KeepPositionOtherwiseEnd => (true, true),
+        };
+
+        // Add node if not new
+        let existing = if let Some(v) = self.map.get(&key_ref) {
+            v
+        } else {
+            self.add_node(node, end);
+            return None;
+        };
+
+        // Box node to fix its pointer
+        let mut boxed_node = Box::new(node);
+
+        // Relink node
+        if keep_position {
+            // Relink in place
+            Self::link_overwrite(&mut self.head, &mut self.tail, existing, boxed_node.as_mut());
+        } else {
+            // Unlink existing
+            Self::link_remove(&mut self.head, &mut self.tail, existing);
+
+            // Link new at desired end
+            Self::link_push(&mut self.head, &mut self.tail, boxed_node.as_mut(), end);
+        }
+
+        // Update node in map
+        // We must explicitly remove the element first so that
+        // the KeyRef is properly updated
+        let elem = self.map.remove(&key_ref).unwrap();
+        self.map.insert(key_ref, boxed_node);
+        Some(*elem)
+    }
+
     fn remove_node(&mut self, key: &KeyRef) -> Option<Node> {
         let boxed_node = self.map.remove(key)?;
 
         let mut node = *boxed_node;
 
-        Self::unlink_node(&mut self.head, &mut self.tail, &mut node);
+        Self::link_remove(&mut self.head, &mut self.tail, &mut node);
 
         Some(node)
     }
@@ -304,6 +320,39 @@ impl TagMap {
 
     fn get_node_mut(&mut self, key: &KeyRef) -> Option<&mut Node> {
         self.map.get_mut(key).map(|v| v.as_mut())
+    }
+
+    fn swap_nodes(&mut self, node1: &mut Node, node2: &mut Node) {
+        // Swap eachother's links
+        swap(&mut node1.prev, &mut node2.prev);
+        swap(&mut node1.next, &mut node2.next);
+
+        // Replace neighbour links
+        unsafe {
+            if node1.prev.is_null() {
+                self.head = node1 as *mut Node;
+            } else {
+                (*node1.prev).next = node1 as *mut Node;
+            }
+
+            if node2.prev.is_null() {
+                self.head = node2 as *mut Node;
+            } else {
+                (*node2.prev).next = node2 as *mut Node;
+            }
+            
+            if node1.next.is_null() {
+                self.tail = node1 as *mut Node;
+            } else {
+                (*node1.next).prev = node1 as *mut Node;
+            }
+            
+            if node2.next.is_null() {
+                self.tail = node2 as *mut Node;
+            } else {
+                (*node2.next).prev = node2 as *mut Node;
+            }
+        }
     }
 
     /// Insert a [`Tag`] under the given key into this [`TagMap`]. If there was a tag previously
@@ -512,12 +561,173 @@ impl TagMap {
         }
     }
 
+    /// Reverses the order of iteration of this [`TagMap`].
+    pub fn reverse(&mut self) {
+        // Simply swap next/prev of every node and head/tail of linked list
+
+        let mut cur = self.head;
+
+        while !cur.is_null() {
+            let rf = unsafe { &mut *cur };
+            cur = rf.next;
+
+            swap(&mut rf.prev, &mut rf.next);
+        }
+
+        swap(&mut self.head, &mut self.tail);
+    }
+
+    /// Swaps the order of iteration of two elements in this [`TagMap`], given their keys.
+    /// This method only succeeds if both keys are associated with values. This method returns
+    /// `true` if and only if both keys existed in the map and were swapped. If the keys are
+    /// the same, then nothing happens and true is returned if and only if there existed a node
+    /// for the given key.
+    pub fn swap<T1: ?Sized, T2: ?Sized>(&mut self, key1: &T1, key2: &T2) -> bool
+    where
+        for<'a> &'a T1: Into<String>,
+        for<'a> &'a T2: Into<String>,
+    {
+        let key1 = key1.into();
+        let key2 = key2.into();
+
+        if key1 == key2 {
+            return self.get_node(&KeyRef::tmp(&key1)).is_some();
+        }
+
+        let Some(node1) = self.get_node_mut(&KeyRef::tmp(&key1.into())) else {
+            return false;
+        };
+
+        // Reborrow to trick the borrow checker into allowing us
+        // to mutably borrow self more than once
+        // (safe because we know no concurrency happens here)
+        let node1 = unsafe { &mut *(node1 as *mut Node) };
+
+        let Some(node2) = self.get_node_mut(&KeyRef::tmp(&key2.into())) else {
+            return false;
+        };
+
+        // Reborrow this as well
+        let node2 = unsafe { &mut *(node2 as *mut Node) };
+
+        // Borrow self mutably a third time (scandalous!)
+        self.swap_nodes(node1, node2);
+
+        true
+    }
 
     // TODO
     // - Sorting
-    // - Reordering
-    // - Reversing
+    // - Move to start/end
+    // - Move after/before
+    // - Next/previous
+    // - Insert-after/before
+    // - Current insert -> append/prepend
+    // - Mutable iterators
     // - Better docs
+    // - Extract to more generic structure?
+
+    #[cfg(test)]
+    fn assert_neighbour_links(&self, node: &Node) {
+        let node_ptr = node as *const Node as *mut Node;
+
+        if node.prev.is_null() {
+            // node has no previous, head must point to this node
+            assert_eq!(
+                self.head, 
+                node_ptr,
+                "node {:?} has no prev pointer but is not the head node",
+                node.key.deref()
+            );
+        } else {
+            // node has previous, previous next must point to this node
+            assert_eq!(
+                unsafe { (*node.prev).next },
+                node_ptr,
+                "node {:?} prev pointer does not point to node whose next pointer points back",
+                node.key.deref()
+            )
+        }
+
+        if node.next.is_null() {
+            // node has no next, tail must point to this node
+            assert_eq!(
+                self.tail,
+                node_ptr,
+                "node {:?} has no next pointer but is not the tail node",
+                node.key.deref()
+            )
+        } else {
+            // node has next, next previous must point to this node
+            assert_eq!(
+                unsafe { (*node.next).prev },
+                node_ptr,
+                "node {:?} next pointer does not point to node whose prev pointer points back",
+                node.key.deref()
+            )
+        }
+    }
+
+    /// Attests the integrity of the [`TagMap`]. This goes over all the internal
+    /// state and panics if there are any inconsistencies. Every unit test should
+    /// call this to ensure every operation preserves the integrity.
+    #[cfg(test)]
+    fn assert_integrity(&self) {
+        use std::collections::HashSet;
+
+        // head and tail are either both null or both not null.
+        // can't have just one null as that would mean the linked
+        // list has elements from the start but is empty from the end
+        // and that makes no sense
+        if self.head.is_null() != self.tail.is_null() {
+            panic!("must have head without tail or vice versa; head: {:?}, tail: {:?}", self.head, self.tail);
+        }
+
+        // collect all keys in a set
+        let mut keys = HashSet::new();
+        for (key, val) in self.map.iter() {
+            // key must refer to correct address.
+            // this can fail if a node is inserted under an existing key,
+            // as HashMap will reuse the old key value, leaving a dangling
+            // pointer once the old node is dropped
+            assert_eq!(
+                key.value,
+                val.key.as_ref() as *const String,
+                "key ref of {:?} points to wrong address", val.key.as_ref()
+            );
+
+            // test linking status of node
+            self.assert_neighbour_links(val.deref());
+
+            // keep track of key
+            keys.insert(unsafe { &*(*key).value });
+        }
+
+        // go over linked list and see if every node is there
+        let mut cur = self.head;
+        while !cur.is_null() {
+            unsafe {
+                // remove key from set.
+                // if that fails, then either the node is not in the
+                // map but is in the linked list, or the linked list
+                // cycles in on itself. neither should happen.
+                if !keys.remove((*cur).key.deref()) {
+                    panic!("element of linked list named {:?} was not in map: is there a cycle?", (*cur).key.deref());
+                }
+
+                // go to next node
+                cur = (*cur).next;
+            }
+        }
+
+        // the set of keys should be empty now, otherwise there are nodes
+        // in the map that are not in the list. we can have this despite
+        // checking all the node linking, as nodes can link in a cycle and
+        // never be reachable from the linked list's ends.
+        for key in keys {
+            panic!("node with key {:?} is not part of linked list", key)
+        }
+    }
 }
 
 impl Debug for TagMap {
@@ -808,6 +1018,7 @@ mod test {
             "baz": 5,
             "gus": 6,
         };
+        map.assert_integrity();
 
         let mut keys = map.into_iter();
 
@@ -816,6 +1027,7 @@ mod test {
         assert_eq!(Some(("baz".into(), Tag::int(5))), keys.next());
         assert_eq!(Some(("gus".into(), Tag::int(6))), keys.next());
         assert_eq!(None, keys.next());
+
     }
 
     #[test]
@@ -825,6 +1037,7 @@ mod test {
         map.insert("bar", Tag::Byte(15));
         map.insert("baz", Tag::Int(34123));
         map.insert("gus", Tag::Int(99128));
+        map.assert_integrity();
 
         let mut keys = map.into_keys();
         assert_eq!(Some("foo".into()), keys.next());
@@ -841,6 +1054,7 @@ mod test {
         map.insert("bar", Tag::Byte(15));
         map.insert("baz", Tag::Int(34123));
         map.insert("bar", Tag::Int(99128));
+        map.assert_integrity();
 
         let mut keys = map.into_keys();
         assert_eq!(Some("foo".into()), keys.next());
@@ -858,11 +1072,50 @@ mod test {
 
         map.remove("bar");
         map.insert("bar", Tag::Int(99128));
+        map.assert_integrity();
 
         let mut keys = map.into_keys();
         assert_eq!(Some("foo".into()), keys.next());
         assert_eq!(Some("baz".into()), keys.next());
         assert_eq!(Some("bar".into()), keys.next());
+        assert_eq!(None, keys.next());
+    }
+
+    #[test]
+    fn test_reverse() {
+        let mut map = TagMap::new();
+        map.insert("foo", Tag::Byte(3));
+        map.insert("bar", Tag::Byte(15));
+        map.insert("baz", Tag::Int(34123));
+        map.insert("gus", Tag::Int(99128));
+
+        map.reverse();
+        map.assert_integrity();
+
+        let mut keys = map.into_keys();
+        assert_eq!(Some("gus".into()), keys.next());
+        assert_eq!(Some("baz".into()), keys.next());
+        assert_eq!(Some("bar".into()), keys.next());
+        assert_eq!(Some("foo".into()), keys.next());
+        assert_eq!(None, keys.next());
+    }
+
+    #[test]
+    fn test_swap() {
+        let mut map = TagMap::new();
+        map.insert("foo", Tag::Byte(3));
+        map.insert("bar", Tag::Byte(15));
+        map.insert("baz", Tag::Int(34123));
+        map.insert("gus", Tag::Int(99128));
+
+        map.swap("foo", "baz");
+        map.assert_integrity();
+
+        let mut keys = map.into_keys();
+        assert_eq!(Some("baz".into()), keys.next());
+        assert_eq!(Some("bar".into()), keys.next());
+        assert_eq!(Some("foo".into()), keys.next());
+        assert_eq!(Some("gus".into()), keys.next());
         assert_eq!(None, keys.next());
     }
 }
