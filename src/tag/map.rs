@@ -1,5 +1,8 @@
+use std::cmp::Ordering;
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::fmt::Display;
 use std::hash::Hash;
 use std::marker::PhantomData;
 use std::mem::swap;
@@ -85,13 +88,6 @@ impl Clone for Node {
     }
 }
 
-enum InsertMode {
-    Start,
-    End,
-    KeepPositionOtherwiseStart,
-    KeepPositionOtherwiseEnd,
-}
-
 /// A mapping from [`String`]s to [`Tag`]s. [`TagMap`]s exhibit much of the functionality of a [`HashMap`],
 /// namely that they can store values under keys, and that each key only exists once. [`TagMap`]s are used
 /// to represent [compound tags][Tag::Compound].
@@ -140,7 +136,7 @@ impl TagMap {
     }
 
     /// Replace a node in the linked list with a new one.
-    fn link_overwrite(head: &mut *mut Node, tail: &mut *mut Node, existing: &Node, new: &mut Node) {
+    fn link_overwrite(&mut self, existing: &Node, new: &mut Node) {
         let prev = existing.prev;
         let next = existing.next;
 
@@ -149,7 +145,7 @@ impl TagMap {
         // Update previous link
         new.prev = prev;
         if prev.is_null() {
-            *head = node_ptr;
+            self.head = node_ptr;
         } else {
             unsafe {
                 (*prev).next = node_ptr;
@@ -159,7 +155,7 @@ impl TagMap {
         // Update next link
         new.next = next;
         if next.is_null() {
-            *tail = node_ptr;
+            self.tail = node_ptr;
         } else {
             unsafe {
                 (*next).prev = node_ptr;
@@ -168,69 +164,69 @@ impl TagMap {
     }
 
     /// Append a node to the linked list.
-    fn link_push(head: &mut *mut Node, tail: &mut *mut Node, node: &mut Node, end: bool) {
+    fn link_push(&mut self, node: &mut Node, end: bool) {
         let node_ptr = node as *mut Node;
         if end {
             unsafe {
-                if head.is_null() {
+                if self.head.is_null() {
                     // First node
-                    *head = node_ptr;
+                    self.head = node_ptr;
                     node.prev = null_mut();
 
-                    *tail = node_ptr;
+                    self.tail = node_ptr;
                     node.next = null_mut();
                 } else {
                     // Not first node
-                    (**tail).next = node_ptr;
-                    node.prev = *tail;
+                    (*self.tail).next = node_ptr;
+                    node.prev = self.tail;
 
                     node.next = null_mut();
-                    *tail = node;
+                    self.tail = node;
                 };
             };
         } else {
             unsafe {
-                if tail.is_null() {
+                if self.tail.is_null() {
                     // First node
-                    *tail = node_ptr;
+                    self.tail = node_ptr;
                     node.next = null_mut();
 
-                    *head = node_ptr;
+                    self.head = node_ptr;
                     node.prev = null_mut();
                 } else {
                     // Not first node
-                    (**head).prev = node_ptr;
-                    node.next = *head;
+                    (*self.head).prev = node_ptr;
+                    node.next = self.head;
 
                     node.prev = null_mut();
-                    *head = node;
+                    self.head = node;
                 };
             };
         }
     }
 
     /// Removes a node from the linked list.
-    fn link_remove(head: &mut *mut Node, tail: &mut *mut Node, node: &Node) {
+    fn link_remove(&mut self, node: &Node) {
         unsafe {
             if node.prev.is_null() && node.next.is_null() {
                 // Node was only node
                 
-                *head = null_mut();
-                *tail = null_mut();
+                self.head = null_mut();
+                self.tail = null_mut();
             } else if node.prev.is_null() {
                 // Node was first node
 
                 let next = node.next;
 
                 (*next).prev = null_mut();
-                *head = next;
+                self.head = next;
             } else if node.next.is_null() {
                 // Node was last node
 
                 let prev = node.prev;
 
                 (*prev).next = null_mut();
-                *tail = prev;
+                self.tail = prev;
             } else {
                 // Node was neither first nor last
 
@@ -240,6 +236,26 @@ impl TagMap {
                 (*prev).next = next;
                 (*next).prev = prev;
             };
+        }
+    }
+
+    /// Removes a node from the linked list.
+    fn link_insert_between(&mut self, node: &mut Node, prev: *mut Node, next: *mut Node) {
+        unsafe {
+            if prev.is_null() {
+                self.head = node as *mut Node;
+            } else {
+                (*prev).next = node as *mut Node;
+            }
+
+            if next.is_null() {
+                self.tail = node as *mut Node;
+            } else {
+                (*next).prev = node as *mut Node;
+            }
+
+            node.next = next;
+            node.prev = prev;
         }
     }
 
@@ -256,52 +272,10 @@ impl TagMap {
         let mut boxed_node = Box::new(node);
 
         // Link node
-        Self::link_push(&mut self.head, &mut self.tail, boxed_node.as_mut(), end);
+        self.link_push(boxed_node.as_mut(), end);
 
         // Insert node into map
         self.map.insert(key_ref, boxed_node);
-    }
-
-    fn put_node(&mut self, node: Node, insert_mode: InsertMode) -> Option<Node> {
-        // Get a key reference
-        let key_ref = node.key_ref();
-
-        let (keep_position, end) = match insert_mode {
-            InsertMode::Start => (false, false),
-            InsertMode::End => (false, true),
-            InsertMode::KeepPositionOtherwiseStart => (true, false),
-            InsertMode::KeepPositionOtherwiseEnd => (true, true),
-        };
-
-        // Add node if not new
-        let existing = if let Some(v) = self.map.get(&key_ref) {
-            v
-        } else {
-            self.add_node(node, end);
-            return None;
-        };
-
-        // Box node to fix its pointer
-        let mut boxed_node = Box::new(node);
-
-        // Relink node
-        if keep_position {
-            // Relink in place
-            Self::link_overwrite(&mut self.head, &mut self.tail, existing, boxed_node.as_mut());
-        } else {
-            // Unlink existing
-            Self::link_remove(&mut self.head, &mut self.tail, existing);
-
-            // Link new at desired end
-            Self::link_push(&mut self.head, &mut self.tail, boxed_node.as_mut(), end);
-        }
-
-        // Update node in map
-        // We must explicitly remove the element first so that
-        // the KeyRef is properly updated
-        let elem = self.map.remove(&key_ref).unwrap();
-        self.map.insert(key_ref, boxed_node);
-        Some(*elem)
     }
 
     fn remove_node(&mut self, key: &KeyRef) -> Option<Node> {
@@ -309,7 +283,7 @@ impl TagMap {
 
         let mut node = *boxed_node;
 
-        Self::link_remove(&mut self.head, &mut self.tail, &mut node);
+        self.link_remove(&mut node);
 
         Some(node)
     }
@@ -365,8 +339,75 @@ impl TagMap {
     /// will keep the order `foo` then `bar`.
     pub fn insert(&mut self, key: impl Into<String>, value: impl Into<Tag>) -> Option<Tag> {
         let node = Node::new(key.into(), value.into());
-        let existing = self.put_node(node, InsertMode::KeepPositionOtherwiseEnd)?;
-        Some(existing.value)
+        
+        // Get a key reference
+        let key_ref = node.key_ref();
+
+        // Box node to fix its pointer
+        let mut boxed_node = Box::new(node);
+
+        // Relink in place
+        let old = if let Some(existing) = self.map.get(&key_ref) {
+            // Reborrow to satisfy borrow chekcer
+            let existing = unsafe { &*(existing.deref() as *const _) };
+
+            // Overwrite node in place
+            self.link_overwrite(existing, boxed_node.as_mut());
+
+            // We must explicitly remove the element first so that
+            // the KeyRef is properly updated. Also allows us to move
+            // out the node early
+            Some(self.map.remove(&key_ref).unwrap().value)
+        } else {
+            self.link_push(boxed_node.as_mut(), true);
+
+            None
+        };
+
+        // Update node in map
+        self.map.insert(key_ref, boxed_node);
+        old
+    }
+
+    fn prepare_insert(&mut self, key: String, value: Tag) -> (Option<Tag>, KeyRef, Box<Node>) {
+        let node = Node::new(key.into(), value.into());
+        
+        // Get a key reference
+        let key_ref = node.key_ref();
+
+        // Box node to fix its pointer
+        let boxed_node = Box::new(node);
+
+        // Relink in place
+        let old = if let Some(existing) = self.map.get(&key_ref) {
+            // Reborrow to satisfy borrow chekcer
+            let existing = unsafe { &*(existing.deref() as *const _) };
+
+            // Remove existing link
+            self.link_remove(existing);
+
+            // We must explicitly remove the element first so that
+            // the KeyRef is properly updated. Also allows us to move
+            // out the node early
+            Some(self.map.remove(&key_ref).unwrap().value)
+        } else {
+            None
+        };
+
+        (old, key_ref, boxed_node)
+    }
+
+    fn insert_at_end(&mut self, key: impl Into<String>, value: impl Into<Tag>, tail: bool) -> Option<Tag> {
+        // prepare insert
+        let (old, key_ref, mut boxed_node) = self.prepare_insert(key.into(), value.into());
+
+        // insert in linked list
+        self.link_push(boxed_node.as_mut(), tail);
+
+        // insert in map
+        self.map.insert(key_ref, boxed_node);
+
+        old
     }
 
     /// Insert a [`Tag`] under the given key into this [`TagMap`]. If there was a tag previously
@@ -377,24 +418,8 @@ impl TagMap {
     /// end. That is, reinserting `foo` and then `bar` into an empty map creates an iteration order
     /// of `foo` and then `bar`, and inserting a new value for `foo` will change the order into `bar`
     /// then `foo`.
-    pub fn reinsert(&mut self, key: impl Into<String>, value: impl Into<Tag>) -> Option<Tag> {
-        let node = Node::new(key.into(), value.into());
-        let existing = self.put_node(node, InsertMode::End)?;
-        Some(existing.value)
-    }
-
-    /// Insert a [`Tag`] under the given key into this [`TagMap`]. If there was a tag previously
-    /// stored with the same key, then that tag is moved out and returned.
-    ///
-    /// # Order
-    /// This method prepends new keys at the start of the iteration order, but keeps the order the same
-    /// if a key already existed in this map. That is, inserting `foo` and then `bar` into an empty map
-    /// creates an iteration order of `bar` and then `foo`, but then inserting a new value for `foo`
-    /// will keep the order `bar` then `foo`.
-    pub fn insert_head(&mut self, key: impl Into<String>, value: impl Into<Tag>) -> Option<Tag> {
-        let node = Node::new(key.into(), value.into());
-        let existing = self.put_node(node, InsertMode::KeepPositionOtherwiseStart)?;
-        Some(existing.value)
+    pub fn insert_at_tail(&mut self, key: impl Into<String>, value: impl Into<Tag>) -> Option<Tag> {
+        self.insert_at_end(key, value, true)
     }
 
     /// Insert a [`Tag`] under the given key into this [`TagMap`]. If there was a tag previously
@@ -405,10 +430,54 @@ impl TagMap {
     /// start. That is, reinserting `foo` and then `bar` into an empty map creates an iteration order
     /// of `bar` and then `foo`, and inserting a new value for `foo` will change the order into `foo`
     /// then `bar`.
-    pub fn reinsert_head(&mut self, key: impl Into<String>, value: impl Into<Tag>) -> Option<Tag> {
-        let node = Node::new(key.into(), value.into());
-        let existing = self.put_node(node, InsertMode::Start)?;
-        Some(existing.value)
+    pub fn insert_at_head(&mut self, key: impl Into<String>, value: impl Into<Tag>) -> Option<Tag> {
+        self.insert_at_end(key, value, false)
+    }
+
+    pub fn insert_after<T>(&mut self, key: impl Into<String>, value: impl Into<Tag>, target: &T) -> Option<Tag>
+    where
+        for<'a> &'a T : Into<String>
+    {
+        let Some(target) = self.get_node_mut(&KeyRef::tmp(&target.into())) else {
+            return self.insert_at_end(key, value, true);
+        };
+
+        let prev = target as *mut Node;
+        let next = target.next;
+
+        // prepare insert
+        let (old, key_ref, mut boxed_node) = self.prepare_insert(key.into(), value.into());
+        
+        // insert in linked list
+        self.link_insert_between(boxed_node.as_mut(), prev, next);
+
+        // insert in map
+        self.map.insert(key_ref, boxed_node);
+
+        old
+    }
+
+    pub fn insert_before<T>(&mut self, key: impl Into<String>, value: impl Into<Tag>, target: &T) -> Option<Tag>
+    where
+        for<'a> &'a T : Into<String>
+    {
+        let Some(target) = self.get_node_mut(&KeyRef::tmp(&target.into())) else {
+            return self.insert_at_end(key, value, true);
+        };
+
+        let prev = target.prev;
+        let next = target as *mut Node;
+
+        // prepare insert
+        let (old, key_ref, mut boxed_node) = self.prepare_insert(key.into(), value.into());
+        
+        // insert in linked list
+        self.link_insert_between(boxed_node.as_mut(), prev, next);
+
+        // insert in map
+        self.map.insert(key_ref, boxed_node);
+
+        old
     }
 
     /// Removes a value from this [`TagMap`] given its key, and returns it. If no value exists with given key,
@@ -516,11 +585,19 @@ impl TagMap {
         self.map.len()
     }
 
+    fn node_iter(&self) -> NodeIterator {
+        NodeIterator {
+            head: self.head,
+            tail: self.tail,
+            end: false
+        }
+    }
+
     /// Returns an iterator that iterates over references to all keys in this [`TagMap`].
     /// The iterator returns keys in the current iteration order of the map.
     pub fn keys(&self) -> Keys<'_> {
         Keys {
-            next: self.head,
+            iter: self.node_iter(),
             lifetime: PhantomData,
         }
     }
@@ -529,8 +606,33 @@ impl TagMap {
     /// The iterator returns values in the current iteration order of the map.
     pub fn values(&self) -> Values<'_> {
         Values {
-            next: self.head,
+            iter: self.node_iter(),
             lifetime: PhantomData,
+        }
+    }
+
+    /// Returns an iterator that iterates over references to all values (tags) in this [`TagMap`].
+    /// The iterator returns values in the current iteration order of the map.
+    pub fn values_mut(&mut self) -> ValuesMut<'_> {
+        ValuesMut {
+            iter: self.node_iter(),
+            lifetime: PhantomData,
+        }
+    }
+
+    /// Returns an iterator that iterates over references to all values (tags) in this [`TagMap`].
+    /// The iterator returns values in the current iteration order of the map.
+    pub fn value_refs(&self) -> ValueRefs<'_> {
+        ValueRefs {
+            iter: self.values()
+        }
+    }
+
+    /// Returns an iterator that iterates over references to all values (tags) in this [`TagMap`].
+    /// The iterator returns values in the current iteration order of the map.
+    pub fn value_refs_mut(&mut self) -> ValueRefsMut<'_> {
+        ValueRefsMut {
+            iter: self.values_mut()
         }
     }
 
@@ -538,8 +640,33 @@ impl TagMap {
     /// The iterator returns elements in the current iteration order of the map.
     pub fn iter(&self) -> Iter<'_> {
         Iter {
-            next: self.head,
+            iter: self.node_iter(),
             lifetime: PhantomData,
+        }
+    }
+
+    /// Returns an iterator that iterates over references to all keys and values in this [`TagMap`], in pairs.
+    /// The iterator returns elements in the current iteration order of the map.
+    pub fn iter_mut(&mut self) -> IterMut<'_> {
+        IterMut {
+            iter: self.node_iter(),
+            lifetime: PhantomData,
+        }
+    }
+
+    /// Returns an iterator that iterates over references to all keys and values in this [`TagMap`], in pairs.
+    /// The iterator returns elements in the current iteration order of the map.
+    pub fn refs(&self) -> Refs<'_> {
+        Refs {
+            iter: self.iter()
+        }
+    }
+
+    /// Returns an iterator that iterates over references to all keys and values in this [`TagMap`], in pairs.
+    /// The iterator returns elements in the current iteration order of the map.
+    pub fn refs_mut(&mut self) -> RefsMut<'_> {
+        RefsMut {
+            iter: self.iter_mut()
         }
     }
 
@@ -547,7 +674,7 @@ impl TagMap {
     /// The iterator returns keys in the current iteration order of the map.
     pub fn into_keys(self) -> IntoKeys {
         IntoKeys {
-            next: self.head,
+            iter: self.node_iter(),
             _owner: self,
         }
     }
@@ -556,7 +683,7 @@ impl TagMap {
     /// The iterator returns values in the current iteration order of the map.
     pub fn into_values(self) -> IntoValues {
         IntoValues {
-            next: self.head,
+            iter: self.node_iter(),
             _owner: self,
         }
     }
@@ -616,16 +743,375 @@ impl TagMap {
         true
     }
 
+    pub fn head(&self) -> Option<(&String, &Tag)> {
+        if self.head.is_null() {
+            return None;
+        }
+
+        let node = unsafe { &*self.head };
+        Some((node.key.as_ref(), &node.value))
+    }
+
+    pub fn head_mut(&mut self) -> Option<(&String, &mut Tag)> {
+        if self.head.is_null() {
+            return None;
+        }
+
+        let node = unsafe { &mut *self.head };
+        Some((node.key.as_ref(), &mut node.value))
+    }
+
+    pub fn head_ref(&self) -> Option<(&String, TagRef<'_>)> {
+        self.head().map(|(k, v)| (k, v.into()))
+    }
+
+    pub fn head_ref_mut(&mut self) -> Option<(&String, TagRefMut<'_>)> {
+        self.head_mut().map(|(k, v)| (k, v.into()))
+    }
+
+    pub fn tail(&self) -> Option<(&String, &Tag)> {
+        if self.tail.is_null() {
+            return None;
+        }
+
+        let node = unsafe { &*self.tail };
+        Some((node.key.as_ref(), &node.value))
+    }
+
+    pub fn tail_mut(&mut self) -> Option<(&String, &mut Tag)> {
+        if self.tail.is_null() {
+            return None;
+        }
+
+        let node = unsafe { &mut *self.tail };
+        Some((node.key.as_ref(), &mut node.value))
+    }
+
+    pub fn tail_ref(&self) -> Option<(&String, TagRef<'_>)> {
+        self.tail().map(|(k, v)| (k, v.into()))
+    }
+
+    pub fn tail_ref_mut(&mut self) -> Option<(&String, TagRefMut<'_>)> {
+        self.tail_mut().map(|(k, v)| (k, v.into()))
+    }
+
+    pub fn next<T>(&self, key: &T) -> Option<(&String, &Tag)>
+    where
+        for<'a> &'a T: Into<String>,
+    {
+        let node = self.get_node(&KeyRef::tmp(&key.into()))?;
+        if node.next.is_null() {
+            return None;
+        }
+
+        let node = unsafe { &*node.next };
+        Some((node.key.as_ref(), &node.value))
+    }
+
+    pub fn next_mut<T>(&mut self, key: &T) -> Option<(&String, &mut Tag)>
+    where
+        for<'a> &'a T: Into<String>,
+    {
+        let node = self.get_node_mut(&KeyRef::tmp(&key.into()))?;
+        if node.next.is_null() {
+            return None;
+        }
+
+        let node = unsafe { &mut *node.next };
+        Some((node.key.as_ref(), &mut node.value))
+    }
+
+    pub fn next_ref<T>(&self, key: &T) -> Option<(&String, TagRef<'_>)>
+    where
+        for<'a> &'a T: Into<String>,
+    {
+        self.next(key).map(|(k, v)| (k, v.into()))
+    }
+
+    pub fn next_ref_mut<T>(&mut self, key: &T) -> Option<(&String, TagRefMut<'_>)>
+    where
+        for<'a> &'a T: Into<String>,
+    {
+        self.next_mut(key).map(|(k, v)| (k, v.into()))
+    }
+
+    pub fn prev<T>(&self, key: &T) -> Option<(&String, &Tag)>
+    where
+        for<'a> &'a T: Into<String>,
+    {
+        let node = self.get_node(&KeyRef::tmp(&key.into()))?;
+        if node.prev.is_null() {
+            return None;
+        }
+
+        let node = unsafe { &*node.prev };
+        Some((node.key.as_ref(), &node.value))
+    }
+
+    pub fn prev_mut<T>(&mut self, key: &T) -> Option<(&String, &mut Tag)>
+    where
+        for<'a> &'a T: Into<String>,
+    {
+        let node = self.get_node_mut(&KeyRef::tmp(&key.into()))?;
+        if node.prev.is_null() {
+            return None;
+        }
+
+        let node = unsafe { &mut *node.prev };
+        Some((node.key.as_ref(), &mut node.value))
+    }
+
+    pub fn prev_ref<T>(&self, key: &T) -> Option<(&String, TagRef<'_>)>
+    where
+        for<'a> &'a T: Into<String>,
+    {
+        self.prev(key).map(|(k, v)| (k, v.into()))
+    }
+
+    pub fn prev_ref_mut<T>(&mut self, key: &T) -> Option<(&String, TagRefMut<'_>)>
+    where
+        for<'a> &'a T: Into<String>,
+    {
+        self.prev_mut(key).map(|(k, v)| (k, v.into()))
+    }
+
+    unsafe fn extract_node_order(&self) -> Vec<*mut Node> {
+        let mut order = Vec::new();
+
+        let mut cur = self.head;
+        while !cur.is_null() {
+            order.push(cur);
+
+            cur = unsafe { (*cur).next };
+        }
+
+        order
+    }
+
+    unsafe fn reconstruct_node_order(&mut self, order: Vec<*mut Node>) {
+        debug_assert!(order.len() == self.len());
+        
+        self.head = null_mut();
+        self.tail = null_mut();
+        
+        unsafe {
+            let mut last = None;
+            for elem in order {
+                if let Some(last) = last {
+                    (*elem).prev = last;
+                    (*last).next = elem;
+                } else {
+                    (*elem).prev = null_mut();
+                    self.head = elem;
+                }
+
+                last = Some(elem);
+            }
+
+            if let Some(last) = last {
+                self.tail = last;
+                (*last).next = null_mut();
+            }
+        }
+    }
+
+    pub fn sort(&mut self) {
+        self.sort_keys_by_cached_key(|s| s);
+    }
+
+    pub fn sort_by<F>(&mut self, mut compare: F)
+    where
+        for<'a> F : FnMut((&'a String, &'a Tag), (&'a String, &'a Tag)) -> Ordering
+    {
+        unsafe {
+            let mut order = self.extract_node_order();
+            order.sort_by(|l, r| compare(((**l).key.deref(), &(**l).value), ((**r).key.deref(), &(**r).value)));
+            self.reconstruct_node_order(order);
+        }
+    }
+
+    pub fn sort_keys_by<F>(&mut self, mut compare: F)
+    where
+        for<'a> F : FnMut(&'a String, &'a String) -> Ordering
+    {
+        self.sort_by(|(l, _), (r, _)| compare(l, r));
+    }
+
+    pub fn sort_values_by<F>(&mut self, mut compare: F)
+    where
+        for <'a> F : FnMut(&'a Tag, &'a Tag) -> Ordering
+    {
+        self.sort_by(|(_, l), (_, r)| compare(l, r));
+    }
+
+    pub fn sort_by_key<F, O>(&mut self, mut f: F)
+    where
+        for<'a> F : FnMut((&'a String, &'a Tag)) -> &'a O,
+        O : Ord
+    {
+        unsafe {
+            let mut order = self.extract_node_order();
+            order.sort_by_key(|v| f(((**v).key.deref(), &(**v).value)));
+            self.reconstruct_node_order(order);
+        }
+    }
+
+    pub fn sort_keys_by_key<F, O>(&mut self, mut f: F)
+    where
+        for<'a> F : FnMut(&'a String) -> &'a O,
+        O : Ord
+    {
+        self.sort_by_key(|(v, _)| f(v));
+    }
+
+    pub fn sort_values_by_key<F, O>(&mut self, mut f: F)
+    where
+        for<'a> F : FnMut(&'a Tag) -> &'a O,
+        O : Ord
+    {
+        self.sort_by_key(|(_, v)| f(v));
+    }
+
+    pub fn sort_by_cached_key<F, O>(&mut self, mut f: F)
+    where
+        for<'a> F : FnMut((&'a String, &'a Tag)) -> &'a O,
+        O : Ord
+    {
+        unsafe {
+            let mut order = self.extract_node_order();
+            order.sort_by_cached_key(|v| f(((**v).key.deref(), &(**v).value)));
+            self.reconstruct_node_order(order);
+        }
+    }
+
+    pub fn sort_keys_by_cached_key<F, O>(&mut self, mut f: F)
+    where
+        for<'a> F : FnMut(&'a String) -> &'a O,
+        O : Ord
+    {
+        self.sort_by_cached_key(|(v, _)| f(v));
+    }
+
+    pub fn sort_values_by_cached_key<F, O>(&mut self, mut f: F)
+    where
+        for<'a> F : FnMut(&'a Tag) -> &'a O,
+        O : Ord
+    {
+        self.sort_by_cached_key(|(_, v)| f(v));
+    }
+
+    pub fn move_to_head<T>(&mut self, key: &T) -> bool
+    where
+        for<'a> &'a T: Into<String>
+    {
+        let Some(node) = self.get_node_mut(&KeyRef::tmp(&key.into())) else {
+            return false;
+        };
+        
+        // Reborrow to regain mutable access to self
+        let node = unsafe { &mut *(node as *mut Node) };
+
+        self.link_remove(node);
+        self.link_push(node, false);
+
+        true
+    }
+
+    pub fn move_to_tail<T>(&mut self, key: &T) -> bool
+    where
+        for<'a> &'a T: Into<String>
+    {
+        let Some(node) = self.get_node_mut(&KeyRef::tmp(&key.into())) else {
+            return false;
+        };
+        
+        // Reborrow to regain mutable access to self
+        let node = unsafe { &mut *(node as *mut Node) };
+
+        self.link_remove(node);
+        self.link_push(node, true);
+
+        true
+    }
+
+    pub fn move_after<T1, T2>(&mut self, key: &T1, target: &T2) -> bool
+    where
+        for<'a> &'a T1: Into<String>,
+        for<'a> &'a T2: Into<String>,
+    {
+        let Some(node) = self.get_node_mut(&KeyRef::tmp(&key.into())) else {
+            return false;
+        };
+
+        // Reborrow to regain mutable access to self
+        let node = unsafe { &mut *(node as *mut Node) };
+
+        let Some(target) = self.get_node_mut(&KeyRef::tmp(&target.into())) else {
+            return false;
+        };
+
+        let prev = target as *mut Node;
+        let next = target.next;
+
+        self.link_remove(node);
+        self.link_insert_between(node, prev, next);
+
+        true
+    }
+
+    pub fn move_before<T1, T2>(&mut self, key: &T1, target: &T2) -> bool
+    where
+        for<'a> &'a T1: Into<String>,
+        for<'a> &'a T2: Into<String>,
+    {
+        let Some(node) = self.get_node_mut(&KeyRef::tmp(&key.into())) else {
+            return false;
+        };
+
+        // Reborrow to regain mutable access to self
+        let node = unsafe { &mut *(node as *mut Node) };
+
+        let Some(target) = self.get_node_mut(&KeyRef::tmp(&target.into())) else {
+            return false;
+        };
+
+        let prev = target.prev;
+        let next = target as *mut Node;
+
+        self.link_remove(node);
+        self.link_insert_between(node, prev, next);
+
+        true
+    }
+
+    pub fn remove_head(&mut self) -> Option<(String, Tag)> {
+        if self.head.is_null() {
+            return None;
+        }
+
+        let head = self.head;
+        let key = unsafe { (*head).key_ref() };
+        let node = self.remove_node(&key).unwrap();
+
+        Some((*node.key, node.value))
+    }
+
+    pub fn remove_tail(&mut self) -> Option<(String, Tag)> {
+        if self.tail.is_null() {
+            return None;
+        }
+
+        let tail = self.tail;
+        let key = unsafe { (*tail).key_ref() };
+        let node = self.remove_node(&key).unwrap();
+
+        Some((*node.key, node.value))
+    }
+
     // TODO
-    // - Sorting
-    // - Move to start/end
-    // - Move after/before
-    // - Next/previous
-    // - Insert-after/before
-    // - Current insert -> append/prepend
-    // - Mutable iterators
     // - Better docs
     // - Extract to more generic structure?
+    // - Double ended iterators
 
     #[cfg(test)]
     fn assert_neighbour_links(&self, node: &Node) {
@@ -740,6 +1226,16 @@ impl Debug for TagMap {
     }
 }
 
+impl Display for TagMap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut map = f.debug_map();
+        for (k, v) in self.iter() {
+            map.entry(k, v);
+        }
+        map.finish()
+    }
+}
+
 impl IntoIterator for TagMap {
     type Item = (String, Tag);
 
@@ -747,7 +1243,7 @@ impl IntoIterator for TagMap {
 
     fn into_iter(self) -> Self::IntoIter {
         IntoIter {
-            next: self.head,
+            iter: self.node_iter(),
             _owner: self,
         }
     }
@@ -775,18 +1271,75 @@ impl PartialEq for TagMap {
 
 impl<S, T> From<HashMap<S, T>> for TagMap where S : Into<String>, T : Into<Tag> {
     fn from(value: HashMap<S, T>) -> Self {
+        Self::from_iter(value)
+    }
+}
+
+impl<S, T> From<BTreeMap<S, T>> for TagMap where S : Into<String>, T : Into<Tag> {
+    fn from(value: BTreeMap<S, T>) -> Self {
+        Self::from_iter(value)
+    }
+}
+
+impl<S, T> FromIterator<(S, T)> for TagMap where S : Into<String>, T : Into<Tag> {
+    fn from_iter<U: IntoIterator<Item = (S, T)>>(iter: U) -> Self {
         let mut map = Self::new();
-        for (k, v) in value {
-            map.insert(k, v);
+        for (k, v) in iter {
+            map.insert_at_tail(k, v);
         }
         map
     }
 }
 
 
+/// Generic iterator implementation for nodes.
+struct NodeIterator {
+    head: *mut Node,
+    tail: *mut Node,
+    end: bool
+}
+
+impl NodeIterator {
+    fn next(&mut self) -> Option<*mut Node> {
+        if self.head.is_null() || self.end {
+            return None;
+        }
+
+        if self.head == self.tail {
+            self.end = true;
+            return Some(self.head);
+        }
+
+        unsafe {
+            let next = self.head;
+            self.head = (*next).next;
+
+            Some(next)
+        }
+    }
+
+    fn next_back(&mut self) -> Option<*mut Node> {
+        if self.tail.is_null() || self.end {
+            return None;
+        }
+
+        if self.head == self.tail {
+            self.end = true;
+            return Some(self.tail);
+        }
+        
+        unsafe {
+            let prev = self.tail;
+            self.tail = (*prev).prev;
+
+            Some(prev)
+        }
+    }
+}
+
 
 pub struct Values<'a> {
-    next: *const Node,
+    iter: NodeIterator,
     lifetime: PhantomData<&'a Node>,
 }
 
@@ -794,21 +1347,83 @@ impl<'a> Iterator for Values<'a> {
     type Item = &'a Tag;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.next.is_null() {
-            None
-        } else {
-            unsafe {
-                let next = &(*self.next).value;
-                self.next = (*self.next).next;
+        unsafe {
+            let next = self.iter.next()?;
 
-                Some(next)
-            }
+            Some(&(*next).value)
         }
     }
 }
 
+impl<'a> DoubleEndedIterator for Values<'a> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        unsafe {
+            let next = self.iter.next_back()?;
+
+            Some(&(*next).value)
+        }
+    }
+}
+
+
+pub struct ValuesMut<'a> {
+    iter: NodeIterator,
+    lifetime: PhantomData<&'a Node>,
+}
+
+impl<'a> Iterator for ValuesMut<'a> {
+    type Item = &'a mut Tag;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        unsafe {
+            let next = self.iter.next()?;
+
+            Some(&mut (*next).value)
+        }
+    }
+}
+
+impl<'a> DoubleEndedIterator for ValuesMut<'a> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        unsafe {
+            let next = self.iter.next_back()?;
+
+            Some(&mut (*next).value)
+        }
+    }
+}
+
+
+pub struct ValueRefs<'a> {
+    iter: Values<'a>
+}
+
+impl<'a> Iterator for ValueRefs<'a> {
+    type Item = TagRef<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let n = self.iter.next()?;
+        Some(n.into())
+    }
+}
+
+
+pub struct ValueRefsMut<'a> {
+    iter: ValuesMut<'a>
+}
+
+impl<'a> Iterator for ValueRefsMut<'a> {
+    type Item = TagRefMut<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let n = self.iter.next()?;
+        Some(n.into())
+    }
+}
+
+
 pub struct Keys<'a> {
-    next: *const Node,
+    iter: NodeIterator,
     lifetime: PhantomData<&'a Node>,
 }
 
@@ -816,21 +1431,26 @@ impl<'a> Iterator for Keys<'a> {
     type Item = &'a String;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.next.is_null() {
-            None
-        } else {
-            unsafe {
-                let next = (*self.next).key.deref();
-                self.next = (*self.next).next;
+        unsafe {
+            let next = self.iter.next()?;
 
-                Some(next)
-            }
+            Some(&*(*next).key)
+        }
+    }
+}
+
+impl<'a> DoubleEndedIterator for Keys<'a> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        unsafe {
+            let next = self.iter.next_back()?;
+
+            Some(&*(*next).key)
         }
     }
 }
 
 pub struct Iter<'a> {
-    next: *const Node,
+    iter: NodeIterator,
     lifetime: PhantomData<&'a Node>,
 }
 
@@ -838,25 +1458,86 @@ impl<'a> Iterator for Iter<'a> {
     type Item = (&'a String, &'a Tag);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.next.is_null() {
-            None
-        } else {
-            unsafe {
-                let nextk = (*self.next).key.deref();
-                let nextv = &(*self.next).value;
-                self.next = (*self.next).next;
+        unsafe {
+            let next = self.iter.next()?;
 
-                Some((nextk, nextv))
-            }
+            Some((&*(*next).key, &(*next).value))
         }
     }
 }
+
+impl<'a> DoubleEndedIterator for Iter<'a> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        unsafe {
+            let next = self.iter.next_back()?;
+
+            Some((&*(*next).key, &(*next).value))
+        }
+    }
+}
+
+pub struct IterMut<'a> {
+    iter: NodeIterator,
+    lifetime: PhantomData<&'a Node>,
+}
+
+impl<'a> Iterator for IterMut<'a> {
+    type Item = (&'a String, &'a mut Tag);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        unsafe {
+            let next = self.iter.next()?;
+
+            Some((&*(*next).key, &mut (*next).value))
+        }
+    }
+}
+
+impl<'a> DoubleEndedIterator for IterMut<'a> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        unsafe {
+            let next = self.iter.next_back()?;
+
+            Some((&*(*next).key, &mut (*next).value))
+        }
+    }
+}
+
+
+pub struct Refs<'a> {
+    iter: Iter<'a>
+}
+
+impl<'a> Iterator for Refs<'a> {
+    type Item = (&'a String, TagRef<'a>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (k, v) = self.iter.next()?;
+        Some((k, v.into()))
+    }
+}
+
+
+pub struct RefsMut<'a> {
+    iter: IterMut<'a>
+}
+
+impl<'a> Iterator for RefsMut<'a> {
+    type Item = (&'a String, TagRefMut<'a>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (k, v) = self.iter.next()?;
+        Some((k, v.into()))
+    }
+}
+
+
 
 const REPLACE_TAG: Tag = Tag::Byte(0);
 const REPLACE_KEY: String = String::new();
 
 pub struct IntoValues {
-    next: *mut Node,
+    iter: NodeIterator,
     _owner: TagMap, // must keep ownership over pointer owner so the pointers don't get dropped yet
 }
 
@@ -864,27 +1545,28 @@ impl Iterator for IntoValues {
     type Item = Tag;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.next.is_null() {
-            None
-        } else {
-            unsafe {
-                // Get a pointer to tag
-                let next = &mut (*self.next).value as *mut Tag;
+        unsafe {
+            let next = self.iter.next()?;
+            let next = &mut (*next).value as *mut Tag;
 
-                // Advance iterator
-                self.next = (*self.next).next;
+            Some(replace(next, REPLACE_TAG))
+        }
+    }
+}
 
-                // Swap the pointed value with the replace tag
-                // so we don't drop the moved value when the
-                // iterator drops.
-                Some(replace(next, REPLACE_TAG))
-            }
+impl DoubleEndedIterator for IntoValues {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        unsafe {
+            let next = self.iter.next_back()?;
+            let next = &mut (*next).value as *mut Tag;
+
+            Some(replace(next, REPLACE_TAG))
         }
     }
 }
 
 pub struct IntoKeys {
-    next: *mut Node,
+    iter: NodeIterator,
     _owner: TagMap, // must keep ownership over pointer owner so the pointers don't get dropped yet
 }
 
@@ -892,27 +1574,28 @@ impl Iterator for IntoKeys {
     type Item = String;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.next.is_null() {
-            None
-        } else {
-            unsafe {
-                // Get a pointer to key
-                let next = Box::as_mut_ptr(&mut (*self.next).key);
+        unsafe {
+            let next = self.iter.next()?;
+            let next = (*next).key.as_mut() as *mut String;
 
-                // Advance iterator
-                self.next = (*self.next).next;
+            Some(replace(next, REPLACE_KEY))
+        }
+    }
+}
 
-                // Swap the pointed value with the replace key
-                // so we don't drop the moved value when the
-                // iterator drops.
-                Some(replace(next, REPLACE_KEY))
-            }
+impl DoubleEndedIterator for IntoKeys {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        unsafe {
+            let next = self.iter.next_back()?;
+            let next = (*next).key.as_mut() as *mut String;
+
+            Some(replace(next, REPLACE_KEY))
         }
     }
 }
 
 pub struct IntoIter {
-    next: *mut Node,
+    iter: NodeIterator,
     _owner: TagMap, // must keep ownership over pointer owner so the pointers don't get dropped yet
 }
 
@@ -920,24 +1603,26 @@ impl Iterator for IntoIter {
     type Item = (String, Tag);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.next.is_null() {
-            None
-        } else {
-            unsafe {
-                // Get a pointer to tag
-                let nextk = Box::as_mut_ptr(&mut (*self.next).key);
 
-                // Get a pointer to tag
-                let nextv = &mut (*self.next).value as *mut Tag;
+        unsafe {
+            let next = self.iter.next()?;
+            let nextk = (*next).key.as_mut() as *mut String;
+            let nextv = &mut (*next).value as *mut Tag;
 
-                // Advance iterator
-                self.next = (*self.next).next;
+            Some((replace(nextk, REPLACE_KEY), replace(nextv, REPLACE_TAG)))
+        }
+    }
+}
 
-                // Swap the pointed value with the replace key
-                // so we don't drop the moved value when the
-                // iterator drops.
-                Some((replace(nextk, REPLACE_KEY), replace(nextv, REPLACE_TAG)))
-            }
+impl DoubleEndedIterator for IntoIter {
+    fn next_back(&mut self) -> Option<Self::Item> {
+
+        unsafe {
+            let next = self.iter.next_back()?;
+            let nextk = (*next).key.as_mut() as *mut String;
+            let nextv = &mut (*next).value as *mut Tag;
+
+            Some((replace(nextk, REPLACE_KEY), replace(nextv, REPLACE_TAG)))
         }
     }
 }
