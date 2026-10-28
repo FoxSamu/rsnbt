@@ -25,7 +25,7 @@ _Minecraft: Java Edition_ files.
 | MCR/MCA region file toolkit        | Testing     | WIP         | `rsnbt::region`  | `region`                   |
 | Bitpacking[^intpack]               | Completed   | WIP         | `rsnbt::bitpack` | `bitpack`                  |
 | Book                               | WIP         | N/A         | N/A              | N/A                        |
-| Linked multi-hashtable `TagMap`    | Not Started | N/A         | `rsnbt::tag`     | Core (exists but is just a linked hashtable at the moment) |
+| Serde[^serde] implementation       | Not Started | N/A         | N/A              | N/A                        |
 
 ## Low priority
 - [ ] Bedrock LevelDB support[^leveldb]
@@ -48,6 +48,8 @@ LevelDB crates.
 [`rusty_leveldb`](https://docs.rs/rusty-leveldb/latest/rusty_leveldb/)
 supports custom compression schemes and is pure Rust, which is probably what
 I will build upon.
+
+[^serde]: https://serde.rs/
 
 
 # Usage
