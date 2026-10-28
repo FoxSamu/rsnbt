@@ -288,12 +288,20 @@ impl TagMap {
         Some(node)
     }
 
-    fn get_node(&self, key: &KeyRef) -> Option<&Node> {
-        self.map.get(key).map(|v| v.as_ref())
+    fn get_node<'a>(&self, key: &KeyRef) -> Option<&'a Node> {
+        let r = self.map.get(key).map(|v| v.as_ref())?;
+        
+        // reborrow because we often get multiple nodes and want to
+        // keep the borrow checker happy
+        Some(unsafe { &*(r as *const Node) })
     }
 
-    fn get_node_mut(&mut self, key: &KeyRef) -> Option<&mut Node> {
-        self.map.get_mut(key).map(|v| v.as_mut())
+    fn get_node_mut<'a>(&mut self, key: &KeyRef) -> Option<&'a mut Node> {
+        let r = self.map.get_mut(key).map(|v| v.as_mut())?;
+
+        // reborrow because we often get multiple nodes and want to
+        // keep the borrow checker happy
+        Some(unsafe { &mut *(r as *mut Node) })
     }
 
     fn swap_nodes(&mut self, node1: &mut Node, node2: &mut Node) {
@@ -347,10 +355,7 @@ impl TagMap {
         let mut boxed_node = Box::new(node);
 
         // Relink in place
-        let old = if let Some(existing) = self.map.get(&key_ref) {
-            // Reborrow to satisfy borrow chekcer
-            let existing = unsafe { &*(existing.deref() as *const _) };
-
+        let old = if let Some(existing) = self.get_node(&key_ref) {
             // Overwrite node in place
             self.link_overwrite(existing, boxed_node.as_mut());
 
@@ -379,10 +384,7 @@ impl TagMap {
         let boxed_node = Box::new(node);
 
         // Relink in place
-        let old = if let Some(existing) = self.map.get(&key_ref) {
-            // Reborrow to satisfy borrow chekcer
-            let existing = unsafe { &*(existing.deref() as *const _) };
-
+        let old = if let Some(existing) = self.get_node(&key_ref) {
             // Remove existing link
             self.link_remove(existing);
 
@@ -434,12 +436,19 @@ impl TagMap {
         self.insert_at_end(key, value, false)
     }
 
-    pub fn insert_after<T>(&mut self, key: impl Into<String>, value: impl Into<Tag>, target: &T) -> Option<Tag>
+    pub fn insert_after<T: ?Sized>(&mut self, key: impl Into<String>, value: impl Into<Tag>, target: &T) -> Option<Tag>
     where
         for<'a> &'a T : Into<String>
     {
+        let key = key.into();
+        let target = target.into();
+
+        if key == target {
+            return self.insert(&key, value);
+        }
+
         let Some(target) = self.get_node_mut(&KeyRef::tmp(&target.into())) else {
-            return self.insert_at_end(key, value, true);
+            return None;
         };
 
         let prev = target as *mut Node;
@@ -457,12 +466,19 @@ impl TagMap {
         old
     }
 
-    pub fn insert_before<T>(&mut self, key: impl Into<String>, value: impl Into<Tag>, target: &T) -> Option<Tag>
+    pub fn insert_before<T: ?Sized>(&mut self, key: impl Into<String>, value: impl Into<Tag>, target: &T) -> Option<Tag>
     where
         for<'a> &'a T : Into<String>
     {
+        let key = key.into();
+        let target = target.into();
+
+        if key == target {
+            return self.insert(&key, value);
+        }
+
         let Some(target) = self.get_node_mut(&KeyRef::tmp(&target.into())) else {
-            return self.insert_at_end(key, value, true);
+            return None;
         };
 
         let prev = target.prev;
@@ -725,17 +741,9 @@ impl TagMap {
             return false;
         };
 
-        // Reborrow to trick the borrow checker into allowing us
-        // to mutably borrow self more than once
-        // (safe because we know no concurrency happens here)
-        let node1 = unsafe { &mut *(node1 as *mut Node) };
-
         let Some(node2) = self.get_node_mut(&KeyRef::tmp(&key2.into())) else {
             return false;
         };
-
-        // Reborrow this as well
-        let node2 = unsafe { &mut *(node2 as *mut Node) };
 
         // Borrow self mutably a third time (scandalous!)
         self.swap_nodes(node1, node2);
@@ -795,7 +803,7 @@ impl TagMap {
         self.tail_mut().map(|(k, v)| (k, v.into()))
     }
 
-    pub fn next<T>(&self, key: &T) -> Option<(&String, &Tag)>
+    pub fn next<T : ?Sized>(&self, key: &T) -> Option<(&String, &Tag)>
     where
         for<'a> &'a T: Into<String>,
     {
@@ -808,7 +816,7 @@ impl TagMap {
         Some((node.key.as_ref(), &node.value))
     }
 
-    pub fn next_mut<T>(&mut self, key: &T) -> Option<(&String, &mut Tag)>
+    pub fn next_mut<T : ?Sized>(&mut self, key: &T) -> Option<(&String, &mut Tag)>
     where
         for<'a> &'a T: Into<String>,
     {
@@ -821,21 +829,21 @@ impl TagMap {
         Some((node.key.as_ref(), &mut node.value))
     }
 
-    pub fn next_ref<T>(&self, key: &T) -> Option<(&String, TagRef<'_>)>
+    pub fn next_ref<T : ?Sized>(&self, key: &T) -> Option<(&String, TagRef<'_>)>
     where
         for<'a> &'a T: Into<String>,
     {
         self.next(key).map(|(k, v)| (k, v.into()))
     }
 
-    pub fn next_ref_mut<T>(&mut self, key: &T) -> Option<(&String, TagRefMut<'_>)>
+    pub fn next_ref_mut<T : ?Sized>(&mut self, key: &T) -> Option<(&String, TagRefMut<'_>)>
     where
         for<'a> &'a T: Into<String>,
     {
         self.next_mut(key).map(|(k, v)| (k, v.into()))
     }
 
-    pub fn prev<T>(&self, key: &T) -> Option<(&String, &Tag)>
+    pub fn prev<T : ?Sized>(&self, key: &T) -> Option<(&String, &Tag)>
     where
         for<'a> &'a T: Into<String>,
     {
@@ -848,7 +856,7 @@ impl TagMap {
         Some((node.key.as_ref(), &node.value))
     }
 
-    pub fn prev_mut<T>(&mut self, key: &T) -> Option<(&String, &mut Tag)>
+    pub fn prev_mut<T : ?Sized>(&mut self, key: &T) -> Option<(&String, &mut Tag)>
     where
         for<'a> &'a T: Into<String>,
     {
@@ -861,14 +869,14 @@ impl TagMap {
         Some((node.key.as_ref(), &mut node.value))
     }
 
-    pub fn prev_ref<T>(&self, key: &T) -> Option<(&String, TagRef<'_>)>
+    pub fn prev_ref<T : ?Sized>(&self, key: &T) -> Option<(&String, TagRef<'_>)>
     where
         for<'a> &'a T: Into<String>,
     {
         self.prev(key).map(|(k, v)| (k, v.into()))
     }
 
-    pub fn prev_ref_mut<T>(&mut self, key: &T) -> Option<(&String, TagRefMut<'_>)>
+    pub fn prev_ref_mut<T : ?Sized>(&mut self, key: &T) -> Option<(&String, TagRefMut<'_>)>
     where
         for<'a> &'a T: Into<String>,
     {
@@ -1000,16 +1008,18 @@ impl TagMap {
         self.sort_by_cached_key(|(_, v)| f(v));
     }
 
-    pub fn move_to_head<T>(&mut self, key: &T) -> bool
+    pub fn move_to_head<T : ?Sized>(&mut self, key: &T) -> bool
     where
         for<'a> &'a T: Into<String>
     {
         let Some(node) = self.get_node_mut(&KeyRef::tmp(&key.into())) else {
             return false;
         };
-        
-        // Reborrow to regain mutable access to self
-        let node = unsafe { &mut *(node as *mut Node) };
+
+        if node.prev.is_null() {
+            // node is head already
+            return true;
+        }
 
         self.link_remove(node);
         self.link_push(node, false);
@@ -1017,16 +1027,18 @@ impl TagMap {
         true
     }
 
-    pub fn move_to_tail<T>(&mut self, key: &T) -> bool
+    pub fn move_to_tail<T : ?Sized>(&mut self, key: &T) -> bool
     where
         for<'a> &'a T: Into<String>
     {
         let Some(node) = self.get_node_mut(&KeyRef::tmp(&key.into())) else {
             return false;
         };
-        
-        // Reborrow to regain mutable access to self
-        let node = unsafe { &mut *(node as *mut Node) };
+
+        if node.next.is_null() {
+            // node is tail already
+            return true;
+        }
 
         self.link_remove(node);
         self.link_push(node, true);
@@ -1034,17 +1046,21 @@ impl TagMap {
         true
     }
 
-    pub fn move_after<T1, T2>(&mut self, key: &T1, target: &T2) -> bool
+    pub fn move_after<T1 : ?Sized, T2 : ?Sized>(&mut self, key: &T1, target: &T2) -> bool
     where
         for<'a> &'a T1: Into<String>,
         for<'a> &'a T2: Into<String>,
     {
+        let key = key.into();
+        let target = target.into();
+
+        if key == target {
+            return self.map.contains_key(&KeyRef::tmp(&key));
+        }
+
         let Some(node) = self.get_node_mut(&KeyRef::tmp(&key.into())) else {
             return false;
         };
-
-        // Reborrow to regain mutable access to self
-        let node = unsafe { &mut *(node as *mut Node) };
 
         let Some(target) = self.get_node_mut(&KeyRef::tmp(&target.into())) else {
             return false;
@@ -1053,23 +1069,32 @@ impl TagMap {
         let prev = target as *mut Node;
         let next = target.next;
 
+        if next == node as *mut Node {
+            // node is already in the correct place
+            return true;
+        }
+
         self.link_remove(node);
         self.link_insert_between(node, prev, next);
 
         true
     }
 
-    pub fn move_before<T1, T2>(&mut self, key: &T1, target: &T2) -> bool
+    pub fn move_before<T1 : ?Sized, T2 : ?Sized>(&mut self, key: &T1, target: &T2) -> bool
     where
         for<'a> &'a T1: Into<String>,
         for<'a> &'a T2: Into<String>,
     {
+        let key = key.into();
+        let target = target.into();
+
+        if key == target {
+            return self.map.contains_key(&KeyRef::tmp(&key));
+        }
+
         let Some(node) = self.get_node_mut(&KeyRef::tmp(&key.into())) else {
             return false;
         };
-
-        // Reborrow to regain mutable access to self
-        let node = unsafe { &mut *(node as *mut Node) };
 
         let Some(target) = self.get_node_mut(&KeyRef::tmp(&target.into())) else {
             return false;
@@ -1077,6 +1102,11 @@ impl TagMap {
 
         let prev = target.prev;
         let next = target as *mut Node;
+
+        if prev == node as *mut Node {
+            // node is already in the correct place
+            return true;
+        }
 
         self.link_remove(node);
         self.link_insert_between(node, prev, next);
@@ -1695,6 +1725,29 @@ impl From<TagMap> for Tag {
 mod test {
     use super::*;
 
+    fn base_map() -> TagMap {
+        let map = tag_map! {
+            "foo": 3u8,
+            "bar": "fiz",
+            "baz": 34123,
+            "gus": 3.1415926535,
+        };
+
+        map.assert_integrity();
+
+        map
+    }
+
+    macro_rules! assert_order {
+        ($map:expr $(, $str:literal)* $(,)?) => {
+            let mut keys = $map.keys();
+            $(
+                assert_eq!(Some(&$str.into()), keys.next());
+            )*
+            assert_eq!(None, keys.next());
+        };
+    }
+
     #[test]
     fn test_macro() {
         let map = tag_map! {
@@ -1717,90 +1770,319 @@ mod test {
 
     #[test]
     fn test_basic_inserts_order() {
-        let mut map = TagMap::new();
-        map.insert("foo", Tag::Byte(3));
-        map.insert("bar", Tag::Byte(15));
-        map.insert("baz", Tag::Int(34123));
-        map.insert("gus", Tag::Int(99128));
-        map.assert_integrity();
+        let map = base_map();
 
-        let mut keys = map.into_keys();
-        assert_eq!(Some("foo".into()), keys.next());
-        assert_eq!(Some("bar".into()), keys.next());
-        assert_eq!(Some("baz".into()), keys.next());
-        assert_eq!(Some("gus".into()), keys.next());
-        assert_eq!(None, keys.next());
+        assert_order!(map, "foo", "bar", "baz", "gus");
     }
 
     #[test]
     fn test_insert_overwrite_order() {
-        let mut map = TagMap::new();
-        map.insert("foo", Tag::Byte(3));
-        map.insert("bar", Tag::Byte(15));
-        map.insert("baz", Tag::Int(34123));
-        map.insert("bar", Tag::Int(99128));
+        let mut map = base_map();
+    
+        map.insert("bar", Tag::Int(1241));
         map.assert_integrity();
 
-        let mut keys = map.into_keys();
-        assert_eq!(Some("foo".into()), keys.next());
-        assert_eq!(Some("bar".into()), keys.next());
-        assert_eq!(Some("baz".into()), keys.next());
-        assert_eq!(None, keys.next());
+        assert_order!(map, "foo", "bar", "baz", "gus");
     }
 
     #[test]
     fn test_remove_then_insert_order() {
-        let mut map = TagMap::new();
-        map.insert("foo", Tag::Byte(3));
-        map.insert("bar", Tag::Byte(15));
-        map.insert("baz", Tag::Int(34123));
+        let mut map = base_map();
 
         map.remove("bar");
-        map.insert("bar", Tag::Int(99128));
+        map.insert("bar", Tag::Int(1241));
         map.assert_integrity();
 
-        let mut keys = map.into_keys();
-        assert_eq!(Some("foo".into()), keys.next());
-        assert_eq!(Some("baz".into()), keys.next());
-        assert_eq!(Some("bar".into()), keys.next());
-        assert_eq!(None, keys.next());
+        assert_order!(map, "foo", "baz", "gus", "bar");
     }
 
     #[test]
     fn test_reverse() {
-        let mut map = TagMap::new();
-        map.insert("foo", Tag::Byte(3));
-        map.insert("bar", Tag::Byte(15));
-        map.insert("baz", Tag::Int(34123));
-        map.insert("gus", Tag::Int(99128));
+        let mut map = base_map();
 
         map.reverse();
         map.assert_integrity();
 
-        let mut keys = map.into_keys();
-        assert_eq!(Some("gus".into()), keys.next());
-        assert_eq!(Some("baz".into()), keys.next());
-        assert_eq!(Some("bar".into()), keys.next());
-        assert_eq!(Some("foo".into()), keys.next());
-        assert_eq!(None, keys.next());
+        assert_order!(map, "gus", "baz", "bar", "foo");
+    }
+
+    #[test]
+    fn test_reverse_empty() {
+        let mut map = TagMap::new();
+
+        map.reverse();
+        map.assert_integrity();
+
+        assert_order!(map);
     }
 
     #[test]
     fn test_swap() {
-        let mut map = TagMap::new();
-        map.insert("foo", Tag::Byte(3));
-        map.insert("bar", Tag::Byte(15));
-        map.insert("baz", Tag::Int(34123));
-        map.insert("gus", Tag::Int(99128));
+        let mut map = base_map();
 
         map.swap("foo", "baz");
         map.assert_integrity();
 
-        let mut keys = map.into_keys();
-        assert_eq!(Some("baz".into()), keys.next());
-        assert_eq!(Some("bar".into()), keys.next());
-        assert_eq!(Some("foo".into()), keys.next());
-        assert_eq!(Some("gus".into()), keys.next());
-        assert_eq!(None, keys.next());
+        assert_order!(map, "baz", "bar", "foo", "gus");
+    }
+
+    #[test]
+    fn test_swap_two_nonexisting() {
+        let mut map = base_map();
+
+        map.swap("qux", "fiz");
+        map.assert_integrity();
+
+        assert_order!(map, "baz", "bar", "foo", "gus");
+    }
+
+    #[test]
+    fn test_swap_one_nonexisting() {
+        let mut map = base_map();
+
+        map.swap("bar", "fiz");
+        map.assert_integrity();
+
+        assert_order!(map, "baz", "bar", "foo", "gus");
+    }
+
+    #[test]
+    fn test_move_to_head() {
+        let mut map = base_map();
+
+        map.move_to_head("baz");
+        map.assert_integrity();
+
+        assert_order!(map, "baz", "foo", "bar", "gus");
+    }
+
+    #[test]
+    fn test_move_to_tail() {
+        let mut map = base_map();
+
+        map.move_to_tail("baz");
+        map.assert_integrity();
+
+        assert_order!(map, "foo", "bar", "gus", "baz");
+    }
+
+    #[test]
+    fn test_move_to_head_in_place() {
+        let mut map = base_map();
+
+        map.move_to_head("foo");
+        map.assert_integrity();
+
+        assert_order!(map, "foo", "bar", "baz", "gus");
+    }
+
+    #[test]
+    fn test_move_to_tail_in_place() {
+        let mut map = base_map();
+
+        map.move_to_tail("gus");
+        map.assert_integrity();
+
+        assert_order!(map, "foo", "bar", "baz", "gus");
+    }
+
+    #[test]
+    fn test_move_after() {
+        let mut map = base_map();
+
+        map.move_after("baz", "foo");
+        map.assert_integrity();
+
+        assert_order!(map, "foo", "baz", "bar", "gus");
+    }
+
+    #[test]
+    fn test_move_before() {
+        let mut map = base_map();
+
+        map.move_before("baz", "bar");
+        map.assert_integrity();
+
+        assert_order!(map, "foo", "baz", "bar", "gus");
+    }
+
+    #[test]
+    fn test_move_after_in_place() {
+        let mut map = base_map();
+
+        map.move_after("baz", "bar");
+        map.assert_integrity();
+
+        assert_order!(map, "foo", "bar", "baz", "gus");
+    }
+
+    #[test]
+    fn test_move_before_in_place() {
+        let mut map = base_map();
+
+        map.move_before("baz", "gus");
+        map.assert_integrity();
+
+        assert_order!(map, "foo", "bar", "baz", "gus");
+    }
+
+    #[test]
+    fn test_move_after_self() {
+        let mut map = base_map();
+
+        map.move_after("baz", "baz");
+        map.assert_integrity();
+
+        assert_order!(map, "foo", "bar", "baz", "gus");
+    }
+
+    #[test]
+    fn test_move_before_self() {
+        let mut map = base_map();
+
+        map.move_before("baz", "baz");
+        map.assert_integrity();
+
+        assert_order!(map, "foo", "bar", "baz", "gus");
+    }
+
+    #[test]
+    fn test_move_after_nonexisting() {
+        let mut map = base_map();
+
+        map.move_after("baz", "fiz");
+        map.assert_integrity();
+
+        assert_order!(map, "foo", "bar", "baz", "gus");
+    }
+
+    #[test]
+    fn test_move_before_nonexisting() {
+        let mut map = base_map();
+
+        map.move_before("baz", "fiz");
+        map.assert_integrity();
+
+        assert_order!(map, "foo", "bar", "baz", "gus");
+    }
+
+    #[test]
+    fn test_insert_at_head() {
+        let mut map = base_map();
+
+        map.insert_at_head("qux", 42);
+        map.assert_integrity();
+
+        assert_order!(map, "qux", "foo", "bar", "baz", "gus");
+    }
+
+    #[test]
+    fn test_insert_at_tail() {
+        let mut map = base_map();
+
+        map.insert_at_tail("qux", 42);
+        map.assert_integrity();
+
+        assert_order!(map, "foo", "bar", "baz", "gus", "qux");
+    }
+
+    #[test]
+    fn test_insert_after() {
+        let mut map = base_map();
+
+        map.insert_after("qux", 42, "bar");
+        map.assert_integrity();
+
+        assert_order!(map, "foo", "bar", "qux", "baz", "gus");
+    }
+
+    #[test]
+    fn test_insert_before() {
+        let mut map = base_map();
+
+        map.insert_before("qux", 42, "baz");
+        map.assert_integrity();
+
+        assert_order!(map, "foo", "bar", "qux", "baz", "gus");
+    }
+
+    #[test]
+    fn test_insert_at_head_existing() {
+        let mut map = base_map();
+
+        map.insert_at_head("baz", 42);
+        map.assert_integrity();
+
+        assert_order!(map, "baz", "foo", "bar", "gus");
+    }
+
+    #[test]
+    fn test_insert_at_tail_existing() {
+        let mut map = base_map();
+
+        map.insert_at_tail("bar", 42);
+        map.assert_integrity();
+
+        assert_order!(map, "foo", "baz", "gus", "bar");
+    }
+
+    #[test]
+    fn test_insert_after_existing() {
+        let mut map = base_map();
+
+        map.insert_after("gus", 42, "foo");
+        map.assert_integrity();
+
+        assert_order!(map, "foo", "gus", "bar", "baz");
+    }
+
+    #[test]
+    fn test_insert_before_existing() {
+        let mut map = base_map();
+
+        map.insert_before("foo", 42, "gus");
+        map.assert_integrity();
+
+        assert_order!(map, "bar", "baz", "foo", "gus");
+    }
+
+    #[test]
+    fn test_insert_after_self() {
+        let mut map = base_map();
+
+        map.insert_after("bar", 42, "bar");
+        map.assert_integrity();
+
+        assert_order!(map, "foo", "bar", "baz", "gus");
+    }
+
+    #[test]
+    fn test_insert_before_self() {
+        let mut map = base_map();
+
+        map.insert_before("bar", 42, "bar");
+        map.assert_integrity();
+
+        assert_order!(map, "foo", "bar", "baz", "gus");
+    }
+
+    #[test]
+    fn test_insert_after_nonexisting() {
+        let mut map = base_map();
+
+        map.insert_after("qux", 42, "fiz");
+        map.assert_integrity();
+
+        assert_order!(map, "foo", "bar", "baz", "gus");
+    }
+
+    #[test]
+    fn test_insert_before_nonexisting() {
+        let mut map = base_map();
+
+        map.insert_before("qux", 42, "fiz");
+        map.assert_integrity();
+
+        assert_order!(map, "foo", "bar", "baz", "gus");
     }
 }
